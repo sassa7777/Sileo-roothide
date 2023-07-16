@@ -81,7 +81,7 @@ enum Jailbreak: String, Codable {
         
         let palecursus = URL(fileURLWithPath: "/.palecursus_strapped")
         let procursus = URL(fileURLWithPath: "/.procursus_strapped")
-        let rootless_procursus = URL(fileURLWithPath: "/var/jb/.procursus_strapped")
+        let rootless_procursus = URL(fileURLWithPath: jbpath("/var/jb/.procursus_strapped"))
         let checkra1n = URL(fileURLWithPath: "/var/checkra1n.dmg")
         let unc0ver = URL(fileURLWithPath: "/.installed_unc0ver")
         let bakera1n = URL(fileURLWithPath: "/cores/binpack/.installed_overlay")
@@ -119,13 +119,13 @@ enum Jailbreak: String, Codable {
                     return
                 }
                 
-                let fugu = URL(fileURLWithPath: "/var/jb/.installed_fugu15max")
+                let fugu = URL(fileURLWithPath: jbpath("/var/jb/.installed_fugu15max"))
                 if fugu.exists {
                     self = .fugu15
                     return
                 }
                 
-                let dopamine = URL(fileURLWithPath: "/var/jb/.installed_dopamine")
+                let dopamine = URL(fileURLWithPath: jbpath("/var/jb/.installed_dopamine"))
                 if dopamine.exists {
                     self = .dopamine
                     return

@@ -69,7 +69,7 @@ class DpkgWrapper {
         let defaultArchitectures: DPKGArchitecture
         let prefix = CommandPath.prefix
         switch prefix {
-        case "/var/jb": defaultArchitectures = DPKGArchitecture(primary: .rootless, foreign: [])
+        case jbpath("/var/jb"): defaultArchitectures = DPKGArchitecture(primary: .rootless, foreign: [])
         default: defaultArchitectures = DPKGArchitecture(primary: .rootful, foreign: [])
         }
         #endif

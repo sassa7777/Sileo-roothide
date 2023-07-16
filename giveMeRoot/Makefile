@@ -5,6 +5,8 @@ CC             ?= xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=11.0
 TAGET_CODESIGN ?= ldid
 CFLAGS         ?= -Wall
 
+LDFLAGS += -ljbpath
+
 .PHONY: all clean
 
 all: $(OUTDIR)/$(TARGET)
@@ -34,7 +36,7 @@ $(OUTDIR):
 	@mkdir -p $(OUTDIR)
 
 $(OUTDIR)/$(TARGET): giveMeRoot.c | $(OUTDIR)
-	@$(CC) -o $@ $^ $(CFLAGS)
+	@$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 	@$(TAGET_CODESIGN) -SEntitlements.plist $@
 
 clean:
