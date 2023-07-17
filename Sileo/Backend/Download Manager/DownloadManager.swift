@@ -414,10 +414,11 @@ final class DownloadManager {
         #if TARGET_SANDBOX || targetEnvironment(simulator)
         return
         #endif
-        let aptOutput: APTOutput
+        var aptOutput: APTOutput
         do {
             // Get the full list of packages to be installed and removed from apt
             aptOutput = try APTWrapper.operationList(installList: installationsAndUpgrades, removeList: uninstallations.raw)
+            NSLog("aptOutput=\(aptOutput.operations), \(aptOutput.conflicts)")
         } catch {
             throw error
         }
@@ -449,18 +450,21 @@ final class DownloadManager {
                 installDepOperation[String(host)] = [(operation.packageID, operation.version)]
             }
         }
-        let installIndentifiersReference = installIdentifiers
+        NSLog("installIdentifiers=\(installIdentifiers), installDepOperation=\(installDepOperation)")
+        var installIndentifiersReference = installIdentifiers
         var rawInstalls = ContiguousArray<Package>()
         for (host, packages) in installDepOperation {
             if let repo = RepoManager.shared.repoList.first(where: { $0.url?.host == host }) {
                 for package in packages {
                     if let repoPackage = repo.packageDict[package.0] {
-                        if repoPackage.version == package.1 {
-                            rawInstalls.append(repoPackage)
-                            installIdentifiers.removeAll { $0 == package.0 }
-                        } else if let version = repoPackage.getVersion(package.1) {
-                            rawInstalls.append(version)
-                            installIdentifiers.removeAll { $0 == package.0 }
+                        if checkRootHide(repoPackage) {
+                            if repoPackage.version == package.1 {
+                                rawInstalls.append(repoPackage)
+                                installIdentifiers.removeAll { $0 == package.0 }
+                            } else if let version = repoPackage.getVersion(package.1) {
+                                rawInstalls.append(version)
+                                installIdentifiers.removeAll { $0 == package.0 }
+                            }
                         }
                     }
                 }
@@ -468,15 +472,31 @@ final class DownloadManager {
                 let localPackages = PackageListManager.shared.localPackages
                 for package in packages {
                     if let localPackage = localPackages[package.0] {
-                        if localPackage.version == package.1 {
-                            rawInstalls.append(localPackage)
-                            installIdentifiers.removeAll { $0 == package.0 }
+                        if checkRootHide(localPackage) {
+                            if localPackage.version == package.1 {
+                                rawInstalls.append(localPackage)
+                                installIdentifiers.removeAll { $0 == package.0 }
+                            }
                         }
                     }
                 }
             }
         }
+        NSLog("rawInstalls=\(rawInstalls)")
         rawInstalls += PackageListManager.shared.packages(identifiers: installIdentifiers, sorted: false)
+        NSLog("rawInstalls=\(rawInstalls)")
+        
+        for package in rawInstalls {
+            if !checkRootHide(package) {
+                let compat = APTBrokenPackage.ConflictingPackage(package:"RootHide", conflict:.conflicts)
+                let brokenPackage = APTBrokenPackage(packageID: package.packageID, conflictingPackages: [compat])
+                aptOutput.conflicts.append(brokenPackage)
+//                rawInstalls.removeAll { $0 == package}
+//                installIdentifiers.removeAll { $0 == package.packageID}
+//                installIndentifiersReference.removeAll { $0 == package.packageID}
+            }
+        }
+        
         guard rawInstalls.count == installIndentifiersReference.count else {
             throw APTParserErrors.blankJsonOutput(error: "Install Identifier Mismatch for Identifiers:\n \(installIdentifiers.map { "\($0)\n" })")
         }
@@ -615,8 +635,42 @@ final class DownloadManager {
         uninstallations.remove { $0.package.package == package }
         uninstalldeps.remove { $0.package.package == package }
     }
+    
+    private func checkRootHide(_ package: Package) -> Bool {
 
+        NSLog("package.rawControl=\(package.rawControl)")
+        var found=false
+        if let depends = package.rawControl["depends"] {
+            let parts = depends.components(separatedBy: CharacterSet(charactersIn: ",|"))
+            for part in parts {
+                let newPart = part.replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression).replacingOccurrences(of: " ", with: "")
+                if newPart=="roothide" {
+                    found = true
+                }
+            }
+        }
+        return found
+    }
+    
     public func add(package: Package, queue: DownloadManagerQueue, approved: Bool = false) {
+        NSLog("addPackage=\(package.name), queue=\(queue.rawValue), approved=\(approved) package=\(package.package), depends=\(package.rawControl["depends"])")
+        
+        if queue != .uninstallations && queue != .uninstalldeps {
+            if !checkRootHide(package) {
+                let title = String(localizationKey: "RootHide")
+                let msg = String(localizationKey: "this package has not been updated for RootHide, please contact its developer.")
+                
+                let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
+                let okAction = UIAlertAction(title: String(localizationKey: "OK"), style: .cancel) { _ in
+                    alert.dismiss(animated: true, completion: nil)
+                }
+                alert.addAction(okAction)
+                TabBarController.singleton?.present(alert, animated: true)
+                return
+            }
+        }
+        
+
         let downloadPackage = DownloadPackage(package: package)
         let found = find(package: package.package)
         if found == queue { return }

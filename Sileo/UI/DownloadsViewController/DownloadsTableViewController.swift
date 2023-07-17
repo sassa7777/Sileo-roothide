@@ -437,12 +437,12 @@ class DownloadsTableViewController: SileoViewController {
         animator.addCompletion { _ in
             switch self.returnButtonAction {
             case .back, .uicache:
-                spawn(command: CommandPath.uicache, args: ["uicache", "-p", "\(Bundle.main.bundlePath)"]); exit(0)
+                spawn(command: CommandPath.uicache, args: ["uicache", "-p", rootfs("\(Bundle.main.bundlePath)")]); exit(0)
             case .reopen:
                 exit(0)
             case .restart, .reload:
                 if self.refreshSileo {
-                    spawn(command: CommandPath.uicache, args: ["uicache", "-p", "\(Bundle.main.bundlePath)"])
+                    spawn(command: CommandPath.uicache, args: ["uicache", "-p", rootfs("\(Bundle.main.bundlePath)")])
                 }
                 spawn(command: "\(CommandPath.prefix)/usr/bin/sbreload", args: ["sbreload"])
                 while true {

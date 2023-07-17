@@ -5,7 +5,7 @@ CC             ?= xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=11.0
 TAGET_CODESIGN ?= ldid
 CFLAGS         ?= -Wall
 
-LDFLAGS += -ljbpath
+LDFLAGS += -L./ -ljbpath
 
 .PHONY: all clean
 

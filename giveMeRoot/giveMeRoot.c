@@ -7,7 +7,7 @@
 #import <sys/stat.h>
 #import <sysexits.h>
 #include <dlfcn.h>
-#include "jbpath.h"
+#include "jbroot.h"
 
 extern int proc_pidpath(int pid, void *buffer, uint32_t buffersize);
 #define PROC_PIDPATHINFO_MAXSIZE  (1024)
@@ -22,11 +22,11 @@ const char *getBuildtimeAppPath(void) {
 #ifdef PREBOOT
     
 #ifdef NIGHTLY
-    path = jbpath("/var/jb/Applications/Sileo-Nightly.app/Sileo");
+    path = jbroot("/Applications/Sileo-Nightly.app/Sileo");
 #elif BETA
-    path = jbpath("/var/jb/Applications/Sileo-Beta.app/Sileo");
+    path = jbroot("/Applications/Sileo-Beta.app/Sileo");
 #else
-    path = jbpath("/var/jb/Applications/Sileo.app/Sileo");
+    path = jbroot("/Applications/Sileo.app/Sileo");
 #endif
     
 #else

@@ -156,6 +156,8 @@ struct ErrorParserWrapper: Decodable {
 extension APTWrapper {
     // APT syntax: a- = remove a; b = install b
     public class func operationList(installList: Set<DownloadPackage>, removeList: Set<DownloadPackage>) throws -> APTOutput {
+        Thread.callStackSymbols.forEach{NSLog("callstack=\($0)")}
+
         // Error check stuff
         guard !(installList.isEmpty && removeList.isEmpty) else {
             // What the hell are you passing, requesting an operationList without any packages?
@@ -184,7 +186,7 @@ extension APTWrapper {
             // if it has a / that means it's the path which is a local install
             if downloadPackage.package.package.contains("/") {
                 // APT will take the raw package path for install
-                packageOperations.append(downloadPackage.package.debPath ?? downloadPackage.package.package)
+                packageOperations.append((downloadPackage.package.debPath != nil) ? rootfs(downloadPackage.package.debPath) : rootfs(downloadPackage.package.package) )
             } else {
                 // Force the exact version of the package we downloaded from the repository
                 packageOperations.append("\(downloadPackage.package.packageID)=\(downloadPackage.package.version)")

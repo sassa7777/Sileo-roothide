@@ -59,10 +59,10 @@ class DependencyResolverAccelerator {
         #if targetEnvironment(simulator) || TARGET_SANDBOX
         try? FileManager.default.removeItem(atPath: CommandPath.sileolists)
         #else
-        spawnAsRoot(args: [CommandPath.rm, "-rf", CommandPath.sileolists])
-        spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.sileolists])
-        spawnAsRoot(args: [CommandPath.chown, "-R", CommandPath.group, CommandPath.sileolists])
-        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.sileolists])
+        spawnAsRoot(args: [CommandPath.rm, "-rf", rootfs(CommandPath.sileolists)])
+        spawnAsRoot(args: [CommandPath.mkdir, "-p", rootfs(CommandPath.sileolists)])
+        spawnAsRoot(args: [CommandPath.chown, "-R", CommandPath.group, rootfs(CommandPath.sileolists)])
+        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", rootfs(CommandPath.sileolists)])
         #endif
     }
     
@@ -74,7 +74,7 @@ class DependencyResolverAccelerator {
         #if targetEnvironment(simulator) || TARGET_SANDBOX
         try? FileManager.default.removeItem(at: newSourcesFile)
         #else
-        spawnAsRoot(args: [CommandPath.rm, "-rf", newSourcesFile.aptPath])
+        spawnAsRoot(args: [CommandPath.rm, "-rf", rootfs(newSourcesFile.aptPath)])
         #endif
     }
     

@@ -78,7 +78,7 @@ class DownloadsTableViewCell: BaseSubtitleTableViewCell {
             } else {
                 self.subtitle = String(localizationKey: "Queued_Package_Status")
             }
-        } else if shouldHaveDownload {
+        } else if shouldHaveDownload && errorDescription==nil {
             self.subtitle = String(localizationKey: "Queued_Package_Status")
             self.progress = 0
         } else {

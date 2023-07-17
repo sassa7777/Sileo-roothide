@@ -15,7 +15,7 @@ public class CommandPath {
         return "/opt/procursus"
         #else
         if Bootstrap.rootless {
-            return jbpath("/var/jb")
+            return String(jbroot("/").dropLast(1))
         } else {
             return ""
         }

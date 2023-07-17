@@ -67,11 +67,12 @@ class DpkgWrapper {
         let defaultArchitectures: DPKGArchitecture = DPKGArchitecture(primary: .applesilicon, foreign: [])
         #else
         let defaultArchitectures: DPKGArchitecture
-        let prefix = CommandPath.prefix
-        switch prefix {
-        case jbpath("/var/jb"): defaultArchitectures = DPKGArchitecture(primary: .rootless, foreign: [])
-        default: defaultArchitectures = DPKGArchitecture(primary: .rootful, foreign: [])
+        if Bootstrap.rootless {
+            defaultArchitectures = DPKGArchitecture(primary: .rootless, foreign: [])
+        } else {
+            defaultArchitectures = DPKGArchitecture(primary: .rootful, foreign: [])
         }
+        NSLog("defaultArch=\(defaultArchitectures.primary.rawValue)")
         #endif
         #if targetEnvironment(simulator) || TARGET_SANDBOX
         print("Default Archs: \(defaultArchitectures)")
@@ -149,7 +150,7 @@ class DpkgWrapper {
         Name: Bourne-Again SHell
         """
         #else
-        let (_, outputString, _) = spawn(command: CommandPath.dpkgdeb, args: ["dpkg-deb", "--field", "\(packageURL.path)"])
+        let (_, outputString, _) = spawn(command: CommandPath.dpkgdeb, args: ["dpkg-deb", "--field", rootfs("\(packageURL.path)")])
         return outputString
         #endif
     }

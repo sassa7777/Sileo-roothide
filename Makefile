@@ -35,7 +35,7 @@ PLATFORM        = iphoneos
 DEB_ARCH        = iphoneos-arm64
 DESTINATION     =
 CONTENTS        =
-PREFIX          = /var/jb
+PREFIX          =
 SCHEME 			= Sileo
 BUILD_CONFIG	= Release
 SILEO_APP_DIR 	= $(SILEOTMP)/Build/Products/Release-iphoneos/Sileo.app
@@ -200,16 +200,16 @@ stage: all
 	@mkdir -p $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/
 	@mv $(SILEO_APP_DIR) $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	
-	@function process_exec { \
-		$(STRIP) $$1; \
-	}; \
-	function process_bundle { \
-		process_exec $$1/$$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" $$1/Info.plist); \
-	}; \
-	export -f process_exec process_bundle; \
-	find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) -name '*.dylib' -print0 | xargs -I{} -0 bash -c 'process_exec "$$@"' _ {}; \
-	find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) \( -name '*.framework' -or -name '*.appex' \) -print0 | xargs -I{} -0 bash -c 'process_bundle "$$@"' _ {}; \
-	process_bundle $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
+	# @function process_exec { \
+	# 	$(STRIP) $$1; \
+	# }; \
+	# function process_bundle { \
+	# 	process_exec $$1/$$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" $$1/Info.plist); \
+	# }; \
+	# export -f process_exec process_bundle; \
+	# find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) -name '*.dylib' -print0 | xargs -I{} -0 bash -c 'process_exec "$$@"' _ {}; \
+	# find $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP) \( -name '*.framework' -or -name '*.appex' \) -print0 | xargs -I{} -0 bash -c 'process_bundle "$$@"' _ {}; \
+	# process_bundle $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)
 	
 	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/_CodeSignature
 	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Frameworks

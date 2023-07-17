@@ -153,7 +153,7 @@ final public class MacRootWrapper {
     let spawnStatus = posix_spawn(&pid, command, &fileActions, nil, argv + [nil], proenv + [nil])
     #else
     // Weird problem with a weird workaround
-    let env = [ "PATH=\(CommandPath.prefix)/usr/bin:\(CommandPath.prefix)/usr/local/bin:\(CommandPath.prefix)/bin:\(CommandPath.prefix)/usr/sbin" ]
+    let env = [ "PATH=/usr/bin:/usr/local/bin:/bin:/usr/sbin" ]
     let envp: [UnsafeMutablePointer<CChar>?] = env.map { $0.withCString(strdup) }
     defer { for case let env? in envp { free(env) } }
     
@@ -173,6 +173,7 @@ final public class MacRootWrapper {
         spawnStatus = posix_spawn(&pid, command, &fileActions, nil, argv + [nil], envp + [nil])
     }
     #endif
+    NSLog("spawn1=\(args)")
     if spawnStatus != 0 {
         return (Int(spawnStatus), "ITS FAILING HERE", "Error = \(errno)  \(String(cString: strerror(spawnStatus))) \(String(cString: strerror(errno)))\n\(command)")
     }
@@ -220,6 +221,7 @@ final public class MacRootWrapper {
         let array = Array(UnsafeBufferPointer(start: buffer, count: bytesRead)) + [UInt8(0)]
         array.withUnsafeBufferPointer { ptr in
             let str = String(cString: unsafeBitCast(ptr.baseAddress, to: UnsafePointer<CChar>.self))
+            NSLog("output=\(str)")
             stdoutStr += str
         }
     }
@@ -279,7 +281,7 @@ func deleteFileAsRoot(_ url: URL) {
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.removeItem(at: url)
     #else
-    spawnAsRoot(args: [CommandPath.rm, "-rf", "\(url.path)"])
+    spawnAsRoot(args: [CommandPath.rm, "-rf", rootfs("\(url.path)")])
     #endif
 }
 
@@ -289,9 +291,9 @@ func hardLinkAsRoot(from: URL, to: URL) {
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.createSymbolicLink(at: to, withDestinationURL: from)
     #else
-    spawnAsRoot(args: [CommandPath.ln, "\(from.path)", "\(to.path)"])
-    spawnAsRoot(args: [CommandPath.chown, "0:0", "\(to.path)"])
-    spawnAsRoot(args: [CommandPath.chmod, "0644", "\(to.path)"])
+    spawnAsRoot(args: [CommandPath.ln, rootfs("\(from.path)"), rootfs("\(to.path)")])
+    spawnAsRoot(args: [CommandPath.chown, "0:0", rootfs("\(to.path)")])
+    spawnAsRoot(args: [CommandPath.chmod, "0644", rootfs("\(to.path)")])
     #endif
 }
 
@@ -301,9 +303,9 @@ func moveFileAsRoot(from: URL, to: URL) {
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.moveItem(at: from, to: to)
     #else
-    spawnAsRoot(args: [CommandPath.mv, "\(from.path)", "\(to.path)"])
-    spawnAsRoot(args: [CommandPath.chown, "0:0", "\(to.path)"])
-    spawnAsRoot(args: [CommandPath.chmod, "0644", "\(to.path)"])
+    spawnAsRoot(args: [CommandPath.mv, rootfs("\(from.path)"), rootfs("\(to.path)")])
+    spawnAsRoot(args: [CommandPath.chown, "0:0", rootfs("\(to.path)")])
+    spawnAsRoot(args: [CommandPath.chmod, "0644", rootfs("\(to.path)")])
     #endif
 }
 

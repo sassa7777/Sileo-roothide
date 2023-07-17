@@ -413,9 +413,9 @@ final class RepoManager {
 
     private func fixLists() {
         #if !targetEnvironment(simulator) && !TARGET_SANDBOX
-        spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.lists])
-        spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", CommandPath.lists])
-        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.lists])
+        spawnAsRoot(args: [CommandPath.mkdir, "-p", rootfs(CommandPath.lists)])
+        spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", rootfs(CommandPath.lists)])
+        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", rootfs(CommandPath.lists)])
         #endif
     }
 
@@ -1248,11 +1248,11 @@ final class RepoManager {
             }
             
             #if targetEnvironment(macCatalyst)
-            spawnAsRoot(args: [CommandPath.cp, "-f", "\(tempPath.path)", "\(sileoList)"])
+            spawnAsRoot(args: [CommandPath.cp, "-f", rootfs("\(tempPath.path)"), rootfs("\(sileoList)")])
             #else
-            spawnAsRoot(args: [CommandPath.cp, "--reflink=never", "-f", "\(tempPath.path)", "\(sileoList)"])
+            spawnAsRoot(args: [CommandPath.cp, "--reflink=never", "-f", rootfs("\(tempPath.path)"), rootfs("\(sileoList)")])
             #endif
-            spawnAsRoot(args: [CommandPath.chmod, "0644", "\(sileoList)"])
+            spawnAsRoot(args: [CommandPath.chmod, "0644", rootfs("\(sileoList)")])
 
             #endif
         } else {

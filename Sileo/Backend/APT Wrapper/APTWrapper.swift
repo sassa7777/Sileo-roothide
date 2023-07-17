@@ -108,8 +108,8 @@ class APTWrapper {
         return false
 
         #else
-
-        let (_, output, _) = spawn(command: CommandPath.sh, args: ["sh", CommandPath.aptkey, "verify", "-q", "--status-fd", "1", key, data])
+        //why use sh?
+        let (_, output, _) = spawn(command: CommandPath.sh, args: ["sh", rootfs(CommandPath.aptkey), "verify", "-q", "--status-fd", "1", rootfs(key), rootfs(data)])
 
         let outputLines = output.components(separatedBy: "\n")
 
@@ -181,7 +181,7 @@ class APTWrapper {
         for package in installs {
             var packagesStr = package.package.package + "=" + package.package.version
             if package.package.package.contains("/") {
-                packagesStr = package.package.debPath ?? package.package.package
+                packagesStr = (package.package.debPath != nil) ? rootfs(package.package.debPath) : rootfs(package.package.package)
             }
             arguments.append(packagesStr)
         }
@@ -261,7 +261,7 @@ class APTWrapper {
             posix_spawn_file_actions_addclose(&fileActions, pipesileo[1])
         
             let command = arguments.first!
-            if #available(iOS 13, *) {
+            if #available(iOS 13, *) { // >ios13?
                 arguments[0] = String(command.split(separator: "/").last!)
             } else {
                 arguments.insert("giveMeRoot", at: 0)
@@ -274,7 +274,7 @@ class APTWrapper {
                 }
             }
 
-            let environment = ["SILEO=6 1", "CYDIA=6 1", "PATH=\(CommandPath.prefix)/usr/bin:\(CommandPath.prefix)/usr/local/bin:\(CommandPath.prefix)/bin:\(CommandPath.prefix)/usr/sbin"]
+            let environment = ["SILEO=6 1", "CYDIA=6 1", "PATH=/usr/bin:/usr/local/bin:/bin:/usr/sbin"]
             let env: [UnsafeMutablePointer<CChar>?] = environment.map { $0.withCString(strdup) }
             defer {
                 for case let key? in env {
@@ -298,6 +298,8 @@ class APTWrapper {
                 }
                 spawnStatus = posix_spawn(&pid, giveMeRootPath, &fileActions, nil, argv + [nil], env + [nil])
             }
+            
+            NSLog("spawn2=\(arguments)")
             
             if spawnStatus != 0 {
                 return
@@ -486,10 +488,11 @@ class APTWrapper {
                 outputCallback("Updating Icon Cache\n", debugFD)
                 for appName in difference {
                     let appPath = URL(fileURLWithPath: "\(CommandPath.prefix)/Applications/").appendingPathComponent(appName)
+                    //never true on rootless?
                     if appPath.path == Bundle.main.bundlePath {
                         refreshSileo = true
                     } else {
-                        spawn(command: "\(CommandPath.prefix)/usr/bin/uicache", args: ["uicache", "-p", "\(appPath.path)"])
+                        spawn(command: "\(CommandPath.prefix)/usr/bin/uicache", args: ["uicache", "-p", rootfs("\(appPath.path)")])
                     }
                 }
             }
