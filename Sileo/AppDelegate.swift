@@ -19,13 +19,16 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
     public var window: UIWindow?
     
     func applicationDidFinishLaunching(_ application: UIApplication) {
-        EvanderNetworking.CACHE_FORCE = .libraryDirectory
-        let prefix = CommandPath.prefix
-        let old = EvanderNetworking._cacheDirectory
-        EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
-        if prefix != "" && old.dirExists {
-            deleteFileAsRoot(old)
-        }
+//uicache redirected
+//        EvanderNetworking.CACHE_FORCE = .libraryDirectory // Library/Cache -> /Library ?
+//        let prefix = CommandPath.prefix
+//        let old = EvanderNetworking._cacheDirectory //but why stil got file:///var/mobile/Library/Caches/Sileo
+//        EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
+//        NSLog("old=\(old), new=\(EvanderNetworking._cacheDirectory)")
+//        NSLog("CACHE_FORCE=\(EvanderNetworking.CACHE_FORCE), url=\(FileManager.default.urls(for: EvanderNetworking.CACHE_FORCE, in: .userDomainMask)[0]))")
+//        if prefix != "" && old.dirExists {
+//            deleteFileAsRoot(old)
+//        }
         // Prepare the Evander manifest
         Evander.prepare()
         #if targetEnvironment(macCatalyst)
