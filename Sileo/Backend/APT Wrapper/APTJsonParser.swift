@@ -156,7 +156,7 @@ struct ErrorParserWrapper: Decodable {
 extension APTWrapper {
     // APT syntax: a- = remove a; b = install b
     public class func operationList(installList: Set<DownloadPackage>, removeList: Set<DownloadPackage>) throws -> APTOutput {
-        Thread.callStackSymbols.forEach{NSLog("callstack=\($0)")}
+        //Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
 
         // Error check stuff
         guard !(installList.isEmpty && removeList.isEmpty) else {

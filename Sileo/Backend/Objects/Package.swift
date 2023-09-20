@@ -86,6 +86,7 @@ final class Package: PackageProtocol {
     }
     
     func hash(into hasher: inout Hasher) {
+        //NSLog("SileoLog: Package.hash \(packageID) \(version) \(package) \(sourceRepo?.url)")
         hasher.combine(package)
         hasher.combine(version)
     }

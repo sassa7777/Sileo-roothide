@@ -29,10 +29,22 @@ CONTENTS        =
 SCHEME          = Sileo
 BUILD_CONFIG	= Release
 SILEO_APP_DIR 	= $(SILEOTMP)/Build/Products/Release-iphoneos/Sileo.app
+
 else ifeq ($(SILEO_PLATFORM),iphoneos-arm64)
 ARCH            = arm64
 PLATFORM        = iphoneos
 DEB_ARCH        = iphoneos-arm64
+DESTINATION     =
+CONTENTS        =
+PREFIX          = /var/jb
+SCHEME 			= Sileo
+BUILD_CONFIG	= Release
+SILEO_APP_DIR 	= $(SILEOTMP)/Build/Products/Release-iphoneos/Sileo.app
+
+else ifeq ($(SILEO_PLATFORM),iphoneos-arm64e)
+ARCH            = arm64
+PLATFORM        = iphoneos
+DEB_ARCH        = iphoneos-arm64e
 DESTINATION     =
 CONTENTS        =
 PREFIX          =

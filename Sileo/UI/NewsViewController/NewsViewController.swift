@@ -191,7 +191,7 @@ extension NewsViewController { // Get Data
 
             // Find each package and organise into a nice dictionary
             for key in packageCache.keys {
-                let repo = RepoManager.shared.repoList.first(where: { RepoManager.shared.cacheFile(named: "Packages", for: $0).lastPathComponent == key })
+                let repo = RepoManager.shared.repoList.first(where: { $0.archAvailabile && RepoManager.shared.cacheFile(named: "Packages", for: $0).lastPathComponent == key })
                 let localPackages = packageCache[key] ?? []
                 for package in localPackages {
                     if let package2 = repo?.packageDict[package.0] {

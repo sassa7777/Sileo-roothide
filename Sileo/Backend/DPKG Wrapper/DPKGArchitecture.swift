@@ -14,6 +14,7 @@ struct DPKGArchitecture {
     enum Architecture: String, Decodable {
         case rootful = "iphoneos-arm"
         case rootless = "iphoneos-arm64"
+        case roothide = "iphoneos-arm64e"
         case intel = "darwin-amd64"
         case applesilicon = "darwin-arm64"
     }

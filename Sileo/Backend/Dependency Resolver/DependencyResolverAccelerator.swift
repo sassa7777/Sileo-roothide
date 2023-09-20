@@ -67,6 +67,9 @@ class DependencyResolverAccelerator {
     }
     
     public func removeRepo(repo: Repo) {
+        if !repo.archAvailabile {
+            return
+        }
         let url = RepoManager.shared.cacheFile(named: "Packages", for: repo)
         let newSourcesFile = depResolverPrefix.appendingPathComponent(url.lastPathComponent)
         toBePreflighted.removeValue(forKey: url)

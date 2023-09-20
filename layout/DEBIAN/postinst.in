@@ -23,19 +23,7 @@ case "$1" in
 		exit 0
 		;;
 	(triggered)
-		if ! [ -s /usr/lib/libblackjack.dylib ]; then
-			if [ "$2" = "/Library/MobileSubstrate/DynamicLibraries" ]; then
-				finish restart
-				exit 0
-			fi
-		fi
-		if [ -d "/var/jb" ]; then 
-			if [ "$2" = "/Library/MobileSubstrate/DynamicLibraries" ]; then
-				finish restart
-				exit 0
-			fi
-		fi
-		if [ "$2" = "/var/jb/Library/MobileSubstrate/DynamicLibraries" ]; then
+		if [ "$2" = "/Library/MobileSubstrate/DynamicLibraries" ]; then
 			finish restart
 			exit 0
 		fi

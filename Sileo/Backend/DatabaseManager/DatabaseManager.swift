@@ -176,10 +176,12 @@ class DatabaseManager {
     }
    
     public func deleteRepo(repo: Repo) {
+        if !repo.archAvailabile {
+            return
+        }
         let file = RepoManager.shared.cacheFile(named: "Packages", for: repo).lastPathComponent
         let repoURL = Expression<String>("repoURL")
         let packages = Table("Packages")
         _ = try? database.run(packages.filter(repoURL == file).delete())
     }
-    
 }

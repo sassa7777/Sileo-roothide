@@ -67,12 +67,14 @@ class DpkgWrapper {
         let defaultArchitectures: DPKGArchitecture = DPKGArchitecture(primary: .applesilicon, foreign: [])
         #else
         let defaultArchitectures: DPKGArchitecture
-        if Bootstrap.rootless {
-            defaultArchitectures = DPKGArchitecture(primary: .rootless, foreign: [])
+        if Bootstrap.roothide {
+            defaultArchitectures = DPKGArchitecture(primary: .roothide, foreign: [.rootless])
+        } else if Bootstrap.rootless {
+                defaultArchitectures = DPKGArchitecture(primary: .rootless, foreign: [])
         } else {
             defaultArchitectures = DPKGArchitecture(primary: .rootful, foreign: [])
         }
-        NSLog("defaultArch=\(defaultArchitectures.primary.rawValue)")
+        NSLog("SileoLog: defaultArch=\(defaultArchitectures.primary.rawValue)")
         #endif
         #if targetEnvironment(simulator) || TARGET_SANDBOX
         print("Default Archs: \(defaultArchitectures)")
@@ -97,6 +99,9 @@ class DpkgWrapper {
             if let arch = DPKGArchitecture.Architecture(rawValue: component) {
                 _foreign.insert(arch)
             }
+        }
+        if Bootstrap.roothide {
+            _foreign.insert(DPKGArchitecture.Architecture.rootless)
         }
         return DPKGArchitecture(primary: arch, foreign: _foreign)
         #endif

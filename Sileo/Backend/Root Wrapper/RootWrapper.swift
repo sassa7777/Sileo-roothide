@@ -173,7 +173,7 @@ final public class MacRootWrapper {
         spawnStatus = posix_spawn(&pid, command, &fileActions, nil, argv + [nil], envp + [nil])
     }
     #endif
-    NSLog("spawn1=\(args)")
+    NSLog("SileoLog: spawn1=\(args)")
     if spawnStatus != 0 {
         return (Int(spawnStatus), "ITS FAILING HERE", "Error = \(errno)  \(String(cString: strerror(spawnStatus))) \(String(cString: strerror(errno)))\n\(command)")
     }
@@ -221,7 +221,7 @@ final public class MacRootWrapper {
         let array = Array(UnsafeBufferPointer(start: buffer, count: bytesRead)) + [UInt8(0)]
         array.withUnsafeBufferPointer { ptr in
             let str = String(cString: unsafeBitCast(ptr.baseAddress, to: UnsafePointer<CChar>.self))
-            NSLog("output=\(str)")
+            NSLog("SileoLog: output=\(str)")
             stdoutStr += str
         }
     }

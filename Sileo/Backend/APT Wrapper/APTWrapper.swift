@@ -299,7 +299,7 @@ class APTWrapper {
                 spawnStatus = posix_spawn(&pid, giveMeRootPath, &fileActions, nil, argv + [nil], env + [nil])
             }
             
-            NSLog("spawn2=\(arguments)")
+            NSLog("SileoLog: spawn2=\(arguments)")
             
             if spawnStatus != 0 {
                 return

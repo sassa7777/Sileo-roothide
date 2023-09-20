@@ -10,7 +10,8 @@ import Foundation
 
 enum Bootstrap: String, Codable {
     
-    static let rootless = URL(fileURLWithPath: jbroot("/.procursus_strapped")).exists
+    static let roothide = URL(fileURLWithPath: jbroot("/.procursus_strapped")).exists
+    static let rootless = roothide||URL(fileURLWithPath: "/var/jb/.procursus_strapped").exists
     
     case procursus = "Procursus"
     case xina = "Procursus/Xina"

@@ -24,8 +24,8 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
 //        let prefix = CommandPath.prefix
 //        let old = EvanderNetworking._cacheDirectory //but why stil got file:///var/mobile/Library/Caches/Sileo
 //        EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
-//        NSLog("old=\(old), new=\(EvanderNetworking._cacheDirectory)")
-//        NSLog("CACHE_FORCE=\(EvanderNetworking.CACHE_FORCE), url=\(FileManager.default.urls(for: EvanderNetworking.CACHE_FORCE, in: .userDomainMask)[0]))")
+//        NSLog("SileoLog: old=\(old), new=\(EvanderNetworking._cacheDirectory)")
+//        NSLog("SileoLog: CACHE_FORCE=\(EvanderNetworking.CACHE_FORCE), url=\(FileManager.default.urls(for: EvanderNetworking.CACHE_FORCE, in: .userDomainMask)[0]))")
 //        if prefix != "" && old.dirExists {
 //            deleteFileAsRoot(old)
 //        }

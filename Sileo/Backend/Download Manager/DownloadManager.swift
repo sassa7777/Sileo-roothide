@@ -389,6 +389,7 @@ final class DownloadManager {
         return true
     }
     
+    //running in aptQueue
     private func recheckTotalOps() throws {
         if Thread.isMainThread {
             fatalError("This cannot be called from the main thread!")
@@ -418,7 +419,7 @@ final class DownloadManager {
         do {
             // Get the full list of packages to be installed and removed from apt
             aptOutput = try APTWrapper.operationList(installList: installationsAndUpgrades, removeList: uninstallations.raw)
-            NSLog("aptOutput=\(aptOutput.operations), \(aptOutput.conflicts)")
+            NSLog("SileoLog: aptOutput=\(aptOutput.operations), \(aptOutput.conflicts)")
         } catch {
             throw error
         }
@@ -441,50 +442,61 @@ final class DownloadManager {
         var installDepOperation = [String: [(String, String)]]()
         for operation in aptOutput.operations where operation.type == .install {
             installIdentifiers.append(operation.packageID)
-            guard let release = operation.release?.split(separator: " "),
-                  let host = release.first else { continue }
-            if var hostArray = installDepOperation[String(host)] {
-                hostArray.append((operation.packageID, operation.version))
-                installDepOperation[String(host)] = hostArray
-            } else {
-                installDepOperation[String(host)] = [(operation.packageID, operation.version)]
+            //there may be multiple repos in the release: {"Version":"2021.07.18","Package":"chariz-keyring","Release":"192.168.2.171, local-deb [all]","Type":"Inst"}
+            guard let releases = operation.release?.split(separator: ",") else { continue }
+            for release in releases {
+                guard let host = release.trimmingCharacters(in: .whitespaces).split(separator: " ").first else { continue }
+                
+                if var hostArray = installDepOperation[String(host)] {
+                    hostArray.append((operation.packageID, operation.version))
+                    installDepOperation[String(host)] = hostArray
+                } else {
+                    installDepOperation[String(host)] = [(operation.packageID, operation.version)]
+                }
             }
         }
-        NSLog("installIdentifiers=\(installIdentifiers), installDepOperation=\(installDepOperation)")
+        NSLog("SileoLog: installIdentifiers=\(installIdentifiers), installDepOperation=\(installDepOperation)")
         var installIndentifiersReference = installIdentifiers
         var rawInstalls = ContiguousArray<Package>()
         for (host, packages) in installDepOperation {
-            if let repo = RepoManager.shared.repoList.first(where: { $0.url?.host == host }) {
-                for package in packages {
-                    if let repoPackage = repo.packageDict[package.0] {
-                        if checkRootHide(repoPackage) {
-                            if repoPackage.version == package.1 {
-                                rawInstalls.append(repoPackage)
-                                installIdentifiers.removeAll { $0 == package.0 }
-                            } else if let version = repoPackage.getVersion(package.1) {
-                                rawInstalls.append(version)
-                                installIdentifiers.removeAll { $0 == package.0 }
+            for aptPackage in packages {
+                
+                guard installIdentifiers.contains(aptPackage.0) else { continue } //already found one
+                
+                if host == "local-deb" { //preferred local package
+                    if let localPackage = PackageListManager.shared.localPackages[aptPackage.0] {
+                        if checkRootHide(localPackage) {
+                            if localPackage.version == aptPackage.1 {
+                                rawInstalls.append(localPackage)
+                                installIdentifiers.removeAll { $0 == aptPackage.0 }
                             }
                         }
                     }
-                }
-            } else if host == "local-deb" {
-                let localPackages = PackageListManager.shared.localPackages
-                for package in packages {
-                    if let localPackage = localPackages[package.0] {
-                        if checkRootHide(localPackage) {
-                            if localPackage.version == package.1 {
-                                rawInstalls.append(localPackage)
-                                installIdentifiers.removeAll { $0 == package.0 }
+                } else {
+                    //if let repo = RepoManager.shared.repoList.first(where: {return $0.url?.host == host }) {
+                    // a host may have multiple repos
+                    for repo in RepoManager.shared.repoList where repo.url?.host == host {
+                        NSLog("SileoLog: package=\(aptPackage.0),\(aptPackage.1)")
+                        if let repoPackage = repo.packageDict[aptPackage.0] {
+                            NSLog("SileoLog: repoPackage=\(repoPackage.packageID),\(repoPackage.version)")
+                            if checkRootHide(repoPackage) {
+                                if repoPackage.version == aptPackage.1 {
+                                    rawInstalls.append(repoPackage)
+                                    installIdentifiers.removeAll { $0 == aptPackage.0 }
+                                } else if let version = repoPackage.getVersion(aptPackage.1) {
+                                    rawInstalls.append(version)
+                                    installIdentifiers.removeAll { $0 == aptPackage.0 }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        NSLog("rawInstalls=\(rawInstalls)")
+            
+        NSLog("SileoLog: rawInstalls=\(rawInstalls)")
         rawInstalls += PackageListManager.shared.packages(identifiers: installIdentifiers, sorted: false)
-        NSLog("rawInstalls=\(rawInstalls)")
+        NSLog("SileoLog: rawInstalls=\(rawInstalls)")
         
         for package in rawInstalls {
             if !checkRootHide(package) {
@@ -518,10 +530,17 @@ final class DownloadManager {
   
         self.upgrades.setTo(upgrades)
         self.installations.setTo(installations)
+        self.installdeps.setTo(installDeps)
         self.uninstallations.setTo(uninstallations)
         self.uninstalldeps.setTo(uninstallDeps)
-        self.installdeps.setTo(installDeps)
         self.errors.setTo(Set<APTBrokenPackage>(aptOutput.conflicts))
+        
+        NSLog("SileoLog: upgrades=\(upgrades.count), installations=\(installations.count), installdeps=\(installdeps.count) uninstallations=\(uninstallations.count) uninstalldeps=\(uninstalldeps.count) errors=\(errors.count)")
+        for p in self.upgrades.raw { NSLog("SileoLog: upgrades: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
+        for p in self.installations.raw { NSLog("SileoLog: installations: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
+        for p in self.installdeps.raw { NSLog("SileoLog: installdeps: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
+        for p in self.uninstallations.raw { NSLog("SileoLog: uninstallations: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
+        for p in self.uninstalldeps.raw { NSLog("SileoLog: uninstalldeps: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
     }
     
     private func checkInstalled() {
@@ -638,34 +657,61 @@ final class DownloadManager {
     
     private func checkRootHide(_ package: Package) -> Bool {
 
-        NSLog("package.rawControl=\(package.rawControl)")
-        var found=false
-        if let depends = package.rawControl["depends"] {
-            let parts = depends.components(separatedBy: CharacterSet(charactersIn: ",|"))
-            for part in parts {
-                let newPart = part.replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression).replacingOccurrences(of: " ", with: "")
-                if newPart=="roothide" {
-                    found = true
-                }
+//        NSLog("SileoLog: package.rawControl=\(package.rawControl)")
+//        var found=false
+//        if let depends = package.rawControl["depends"] {
+//            let parts = depends.components(separatedBy: CharacterSet(charactersIn: ",|"))
+//            for part in parts {
+//                let newPart = part.replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression).replacingOccurrences(of: " ", with: "")
+//                if newPart=="roothide" {
+//                    found = true
+//                }
+//            }
+//        }
+//        return found
+        
+        NSLog("SileoLog: checkRootHide=\(package.package)(\(package.architecture)):\(package.sourceRepo), \(package.sourceRepo?.repoName), \(package.sourceRepo?.displayName), \(package.sourceRepo?.rawURL), \(package.sourceRepo?.displayURL), \(package.sourceRepo?.repoURL)")
+        
+        let roothideArch = DPKGArchitecture.Architecture.roothide.rawValue
+        if package.architecture==roothideArch {
+            return true;
+        }
+        
+        if package.architecture=="all" {
+            if package.sourceRepo==nil { //local deb ?
+                return true
+            }
+            
+            if package.sourceRepo?.preferredArch==roothideArch {
+                return true
             }
         }
-        return found
+        
+        return false;
     }
     
     public func add(package: Package, queue: DownloadManagerQueue, approved: Bool = false) {
-        NSLog("addPackage=\(package.name), queue=\(queue.rawValue), approved=\(approved) package=\(package.package), depends=\(package.rawControl["depends"])")
+        NSLog("SileoLog: addPackage=\(package.name), queue=\(queue.rawValue), approved=\(approved) package=\(package.package), depends=\(package.rawControl["depends"])")
+        //Thread.callStackSymbols.forEach{NSLog("SileoLog: callstack=\($0)")}
         
         if queue != .uninstallations && queue != .uninstalldeps {
             if !checkRootHide(package) {
-                let title = String(localizationKey: "RootHide")
-                let msg = String(localizationKey: "this package has not been updated for RootHide, please contact its developer.")
-                
-                let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
-                let okAction = UIAlertAction(title: String(localizationKey: "OK"), style: .cancel) { _ in
-                    alert.dismiss(animated: true, completion: nil)
+                DispatchQueue.main.async {
+                    NSLog("SileoLog: not updated for roothide")
+                    let title = String(localizationKey: "RootHide")
+                    let msg = String(localizationKey: "this package has not been updated for RootHide, please contact its developer.")
+                    
+                    let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
+                    let okAction = UIAlertAction(title: String(localizationKey: "OK"), style: .cancel) { _ in
+                        alert.dismiss(animated: true, completion: nil)
+                    }
+                    alert.addAction(okAction)
+                    var controller:UIViewController = TabBarController.singleton!
+                    while controller.presentedViewController != nil {
+                        controller = controller.presentedViewController!
+                    }
+                    controller.present(alert, animated: true)
                 }
-                alert.addAction(okAction)
-                TabBarController.singleton?.present(alert, animated: true)
                 return
             }
         }

@@ -16,10 +16,19 @@ final class DownloadPackage: Hashable {
     }
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(package)
+        //NSLog("SileoLog: DownloadPackage.hash \(package.packageID) \(package.version) \(package.package) \(package.sourceRepo?.url)")
+
+        //shit, this is inconsistent with its custom operator== and may cause crash and incorrect result
+        //hasher.combine(package)
+        
+        hasher.combine(package.packageID)
     }
+
 }
 
 func == (lhs: DownloadPackage, rhs: DownloadPackage) -> Bool {
-    lhs.package.packageID == rhs.package.packageID
+    //NSLog("SileoLog: DownloadPackage \(lhs.package.packageID) == \(rhs.package.packageID):\(lhs.package.packageID == rhs.package.packageID)")
+    //Thread.callStackSymbols.forEach{NSLog("SileoLog: DownloadPackage(==) callstack=\($0)")}
+
+    return lhs.package.packageID == rhs.package.packageID
 }

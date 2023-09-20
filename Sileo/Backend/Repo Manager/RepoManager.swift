@@ -107,7 +107,7 @@ final class RepoManager {
                 return true
             case "apt.procurs.us":
                 let arch = DpkgWrapper.architecture
-                let suite = arch.primary == .rootless ? "" : "iphoneos-arm64/"
+                let suite = arch.primary == .rootful ? "iphoneos-arm64/":""
                 let jailbreakRepo = Repo()
                 jailbreakRepo.rawURL = "https://apt.procurs.us/"
                 jailbreakRepo.suite = "\(suite)\(UIDevice.current.cfMajorVersion)"
@@ -216,6 +216,8 @@ final class RepoManager {
         repoListLock.signal()
         writeListToFile()
         for repo in repos {
+            UserDefaults.standard.removeObject(forKey: "preferredArch_\(repo.url!)")
+            UserDefaults.standard.synchronize()
             DatabaseManager.shared.deleteRepo(repo: repo)
             PaymentManager.shared.removeProviders(for: repo)
             DependencyResolverAccelerator.shared.removeRepo(repo: repo)
@@ -325,15 +327,15 @@ final class RepoManager {
     }
 
     func cacheFile(named name: String, for repo: Repo) -> URL {
-        let arch = DpkgWrapper.architecture
-            .primary.rawValue
+        //let arch = DpkgWrapper.architecture.primary.rawValue
+        let arch = repo.preferredArch //prevent apt from installing foreign packages
         let prefix = cachePrefix(for: repo)
         if !repo.isFlat && name == "Packages" {
             return prefix
             .deletingLastPathComponent()
                 .appendingPathComponent(prefix.lastPathComponent +
                     repo.components.joined(separator: "_") + "_"
-                    + "binary-" + arch + "_"
+                    + "binary-" + arch! + "_"
                     + name)
         }
         return prefix
@@ -442,8 +444,11 @@ final class RepoManager {
             progress?(responseProgress)
         }
         task.errorCallback = { status, error, url in
+            NSLog("SileoLog: errorCallback=\(status) url=\(url) error=\(error)")
+            Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
+
             if let url = url {
-                try? FileManager.default.removeItem(at: url)
+                //try? FileManager.default.removeItem(at: url)
             }
             failure(status, error)
         }
@@ -490,6 +495,9 @@ final class RepoManager {
 
     private func repoRequiresUpdate(_ repo: Repo) -> Bool {
         PackageListManager.shared.initWait()
+        if !repo.packagesExist {
+            return true
+        }
         let packagesFile = cacheFile(named: "Packages", for: repo)
         if !packagesFile.exists {
             return true
@@ -627,7 +635,7 @@ final class RepoManager {
                             }
 
                             guard let repoArchs = (releaseDict["architectures"]?.components(separatedBy: " ") ?? releaseDict["architecture"].map { [$0] }) else {
-                                log("Didn't find architectures \(dpkgArchitectures) in \(releaseURL)", type: .error)
+                                log("Didn't find any architectures in \(releaseDict["architectures"]) : \(releaseURL)", type: .error)
                                 errorsFound = true
                                 return
                             }
@@ -643,7 +651,7 @@ final class RepoManager {
                             }
                             
                             guard preferredArch != nil else {
-                                log("Didn't find architectures \(dpkgArchitectures) in \(releaseURL)", type: .error)
+                                log("Didn't find availabile architectures in \(releaseDict["architectures"]) : \(releaseURL)", type: .error)
                                 errorsFound = true
                                 return
                             }
@@ -681,6 +689,9 @@ final class RepoManager {
                             releaseTask?.cancel()
                         }
                     }
+                    
+                    //save repo config for dists repo
+                    repo.preferredArch = preferredArch
 
                     let packages: URL?
                     if repo.isFlat || preferredArch != nil {
@@ -891,6 +902,7 @@ final class RepoManager {
                     }
                     #endif
 
+                    NSLog("SileoLog: packagesFileDst=\(repo.url),\(repo.isFlat),\(repo.preferredArch),\(repo.packagesExist),\(breakOff),\(optPackagesFile)")
                     let packagesFileDst = self.cacheFile(named: "Packages", for: repo)
                     var skipPackages = false
                     if !breakOff {
@@ -1045,9 +1057,11 @@ final class RepoManager {
             expectedFiles = self.repoList.flatMap { (repo: Repo) -> [String] in
                 var names = [
                     "Release",
-                    "Packages",
                     "Release.gpg"
                 ]
+                if repo.packagesExist {
+                    names.append("Packages")
+                }
                 #if ENABLECACHINGBETA
                 names.append("Packages.plist")
                 #endif
@@ -1183,7 +1197,7 @@ final class RepoManager {
     
     public func parseSourcesFile(at url: URL) {
         guard let rawSources = try? String(contentsOf: url) else {
-            NSLog("[Sileo] \(#function): couldn't get rawSources. we are out of here!")
+            NSLog("SileoLog: [Sileo] \(#function): couldn't get rawSources. we are out of here!")
             return
         }
         let repoEntries = rawSources.components(separatedBy: "\n\n")

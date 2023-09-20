@@ -14,8 +14,10 @@ public class CommandPath {
         #if targetEnvironment(macCatalyst)
         return "/opt/procursus"
         #else
-        if Bootstrap.rootless {
+        if Bootstrap.roothide {
             return String(jbroot("/").dropLast(1))
+        } else if Bootstrap.rootless {
+            return "/var/jb"
         } else {
             return ""
         }

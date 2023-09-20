@@ -73,7 +73,7 @@ public class RootHelper: NSObject, NSXPCListenerDelegate, RootHelperProtocol, Ap
         let proenv: [UnsafeMutablePointer<CChar>?] = env.map { $0.withCString(strdup) }
         defer { for case let pro? in proenv { free(pro) } }
         let spawnStatus = posix_spawn(&pid, command, &fileActions, nil, argv + [nil], proenv + [nil])
-        NSLog("spawn3=\(args)")
+        NSLog("SileoLog: spawn3=\(args)")
         if spawnStatus != 0 {
             return completion(-1, "", "")
         }
@@ -212,7 +212,7 @@ public class RootHelper: NSObject, NSXPCListenerDelegate, RootHelperProtocol, Ap
         
         var pid: pid_t = 0
         let spawnStatus = posix_spawn(&pid, command, &fileActions, nil, argv + [nil], env + [nil])
-        NSLog("spawn4=\(args)")
+        NSLog("SileoLog: spawn4=\(args)")
         if spawnStatus != 0 {
             helper.completion?(status: -1)
             return

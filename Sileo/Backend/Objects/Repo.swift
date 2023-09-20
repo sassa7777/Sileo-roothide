@@ -13,6 +13,27 @@ final class Repo: Equatable {
     var isLoaded: Bool = false
     var isIconLoaded: Bool = false
     
+    var preferredArch: String? {
+        get {
+            UserDefaults.standard.string(forKey: "preferredArch_\(url!)")
+        }
+        set {
+            if newValue==nil {
+                return
+            }
+            UserDefaults.standard.setValue(newValue, forKey: "preferredArch_\(url!)")
+            UserDefaults.standard.synchronize()
+        }
+    }
+    
+    var archAvailabile: Bool {
+        NSLog("SileoLog: archAvailabile=\(self.url)")
+        if !isFlat && preferredArch==nil {
+            return false
+        }
+        return true
+    }
+    
     private var repoNameTmp: Bool = false
     var repoName: String = "" {
         willSet(set) {
@@ -43,7 +64,7 @@ final class Repo: Equatable {
     }
     
     var packagesExist: Bool {
-        FileManager.default.fileExists(atPath: RepoManager.shared.cacheFile(named: "Packages", for: self).aptPath)
+        archAvailabile && FileManager.default.fileExists(atPath: RepoManager.shared.cacheFile(named: "Packages", for: self).aptPath)
     }
     
     var repoDescription: String = ""

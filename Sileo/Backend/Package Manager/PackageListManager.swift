@@ -189,11 +189,17 @@ final class PackageListManager {
         } else if let override = packagesFile {
             tmpPackagesFile = override
             if let repo = repoContext {
+                if !repo.archAvailabile {
+                    return dict
+                }
                 toWrite = RepoManager.shared.cacheFile(named: "Packages", for: repo)
             } else {
                 toWrite = override
             }
         } else if let repo = repoContext {
+            if !repo.archAvailabile {
+                return dict
+            }
             tmpPackagesFile = RepoManager.shared.cacheFile(named: "Packages", for: repo)
             toWrite = RepoManager.shared.cacheFile(named: "Packages", for: repo)
         }
@@ -295,7 +301,27 @@ final class PackageListManager {
         return dict
     }
     
+    func preferredPackage(old: Package, new: Package) -> Bool {
+        if Bootstrap.roothide {
+            let dpkgArch = DpkgWrapper.architecture.primary.rawValue
+            let preferredNew = (new.architecture==dpkgArch ?1:0) + (new.architecture=="all" ?1:0) + (new.sourceRepo?.preferredArch==dpkgArch ?1:0)
+            let preferredOld = (old.architecture==dpkgArch ?1:0) + (old.architecture=="all" ?1:0) + (old.sourceRepo?.preferredArch==dpkgArch ?1:0)
+            if preferredNew==preferredOld {
+                if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
+                    return true
+                }
+            } else if preferredNew > preferredOld {
+                return true;
+            }
+        } else if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
+            return true;
+        }
+        
+        return false
+    }
+    
     public func packageList(identifier: String = "", search: String? = nil, sortPackages sort: Bool = false, repoContext: Repo? = nil, lookupTable: [String: [Package]]? = nil, packagePrepend: [Package]? = nil) -> [Package] {
+        NSLog("SileoLog: packageList=\(identifier),\(search),\(sort),\(repoContext),\(lookupTable?.count),\(packagePrepend) : \(lookupTable)")
         var packageList = [Package]()
         if identifier == "--installed" {
             packageList = Array(installedPackages.values)
@@ -352,7 +378,7 @@ final class PackageListManager {
         var temp = [String: Package]()
         for package in packageList {
             if let existing = temp[package.packageID] {
-                if DpkgWrapper.isVersion(package.version, greaterThan: existing.version) {
+                if preferredPackage(old:existing, new:package) {
                     temp[package.packageID] = package
                 }
             } else {
@@ -363,6 +389,9 @@ final class PackageListManager {
         if sort {
             packageList = sortPackages(packages: packageList, search: search)
         }
+//        for p in packageList {
+//            NSLog("SileoLog: packageList=\(p.package) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
+//        }
         return packageList
     }
     
@@ -423,7 +452,7 @@ final class PackageListManager {
                 packages = packages.filter { $0.packageID == identifier }
                 for package in packages {
                     if let old = newestPackage {
-                        if DpkgWrapper.isVersion(package.version, greaterThan: old.version) {
+                        if preferredPackage(old: old, new: package) {
                             newestPackage = package
                         }
                     } else {
@@ -435,7 +464,7 @@ final class PackageListManager {
             for repo in RepoManager.shared.repoList {
                 if let package = repo.packageDict[identifier] {
                     if let old = newestPackage {
-                        if DpkgWrapper.isVersion(package.version, greaterThan: old.version) {
+                        if preferredPackage(old: old, new: package) {
                             newestPackage = package
                         }
                     } else {
@@ -491,6 +520,11 @@ final class PackageListManager {
     }
     
     public func package(identifier: String, version: String, packages: [Package]? = nil) -> Package? {
+        //prefer using local packages
+        if let package = localPackages[identifier],
+           let version = package.getVersion(version) {
+            return version
+        }
         if let packages = packages {
             return packages.first(where: { $0.packageID == identifier && $0.version == version })
         }
@@ -499,10 +533,6 @@ final class PackageListManager {
                let version = package.getVersion(version) {
                 return version
             }
-        }
-        if let package = localPackages[identifier],
-           let version = package.getVersion(version) {
-            return version
         }
         return nil
     }

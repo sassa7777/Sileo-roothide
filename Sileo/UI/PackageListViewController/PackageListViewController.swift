@@ -249,7 +249,8 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     }
     
     func controller(package: Package) -> PackageActions {
-        NativePackageViewController.viewController(for: package)
+        NSLog("SileoLog: NativePackageViewController=\(package), \(package.sourceRepo)")
+        return NativePackageViewController.viewController(for: package)
     }
     
     func controller(indexPath: IndexPath) -> PackageActions? {
@@ -370,7 +371,8 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             switch string {
             case "installdate": self = .installdate
             case "size": self = .size
-            default: self = .name
+            case "name": self = .name
+            default: self = .installdate
             }
         }
         
