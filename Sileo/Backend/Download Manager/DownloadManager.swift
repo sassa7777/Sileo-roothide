@@ -433,6 +433,8 @@ final class DownloadManager {
         var uninstallations = uninstallations.raw
         let rawUninstalls = PackageListManager.shared.packages(identifiers: uninstallIdentifiers, sorted: false, packages: Array(PackageListManager.shared.installedPackages.values))
         guard rawUninstalls.count == uninstallIdentifiers.count else {
+            rawUninstalls.map({NSLog("SileoLog: rawUninstalls=\($0.packageID) \($0.package)")})
+            uninstallIdentifiers.map({NSLog("SileoLog: uninstallIdentifiers=\($0)")})
             throw APTParserErrors.blankJsonOutput(error: "Uninstall Identifiers Mismatch")
         }
         var uninstallDeps = Set<DownloadPackage>(rawUninstalls.compactMap { DownloadPackage(package: $0) })
@@ -510,7 +512,9 @@ final class DownloadManager {
         }
         
         guard rawInstalls.count == installIndentifiersReference.count else {
-            throw APTParserErrors.blankJsonOutput(error: "Install Identifier Mismatch for Identifiers:\n \(installIdentifiers.map { "\($0)\n" })")
+            rawUninstalls.map({NSLog("SileoLog: rawInstalls=\($0.packageID) \($0.package)")})
+            rawUninstalls.map({NSLog("SileoLog: installIndentifiersReference=\($0)")})
+            throw APTParserErrors.blankJsonOutput(error: "Install Identifier Mismatch for Identifiers")
         }
         var installDeps = Set<DownloadPackage>(rawInstalls.compactMap { DownloadPackage(package: $0) })
         var installations = installations.raw
@@ -655,57 +659,165 @@ final class DownloadManager {
         uninstalldeps.remove { $0.package.package == package }
     }
     
-    private func checkRootHide(_ package: Package) -> Bool {
-
-//        NSLog("SileoLog: package.rawControl=\(package.rawControl)")
-//        var found=false
-//        if let depends = package.rawControl["depends"] {
-//            let parts = depends.components(separatedBy: CharacterSet(charactersIn: ",|"))
-//            for part in parts {
-//                let newPart = part.replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression).replacingOccurrences(of: " ", with: "")
-//                if newPart=="roothide" {
-//                    found = true
-//                }
-//            }
-//        }
-//        return found
+    // call in main queue
+    public func patchPackage(package: Package) {
+        var task:EvanderDownloader?
         
-        NSLog("SileoLog: checkRootHide=\(package.package)(\(package.architecture)):\(package.sourceRepo), \(package.sourceRepo?.repoName), \(package.sourceRepo?.displayName), \(package.sourceRepo?.rawURL), \(package.sourceRepo?.displayURL), \(package.sourceRepo?.repoURL)")
+        let title = String(localizationKey: "Downloading_Package_Status")
+        let msg = "\n \(String(localizationKey: "Downloading_Package_Status")) ...\n"
+        let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
         
-        let roothideArch = DPKGArchitecture.Architecture.roothide.rawValue
-        if package.architecture==roothideArch {
-            return true;
+        let cancel = UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel) { _ in
+            alert.dismiss(animated: true, completion: nil)
+            task?.cancel()
+        }
+        alert.addAction(cancel)
+        
+        var controller:UIViewController = TabBarController.singleton!
+        while controller.presentedViewController != nil {
+            controller = controller.presentedViewController!
         }
         
-        if package.architecture=="all" {
-            if package.sourceRepo==nil { //local deb ?
-                return true
+        controller.present(alert, animated: true)
+        
+        func updateMsg(msg: String) {
+            NSLog("SileoLog: updateMsg=\(msg)")
+            DispatchQueue.main.async {
+                alert.message = "\n \(msg) \n"
             }
+        }
+        
+        func finishDownload(fileURL: URL) {
+            NSLog("SileoLog: finishDownload=\(fileURL.path)")
+            DispatchQueue.main.async {
+                alert.dismiss(animated: true, completion: {
+                    let packageID = self.aptEncoded(string: package.packageID, isArch: false)
+                    let version = self.aptEncoded(string: package.version, isArch: false)
+                    let architecture = self.aptEncoded(string: package.architecture ?? "", isArch: true)
+                    
+                    let extractionPath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    try! FileManager.default.createDirectory(at: extractionPath, withIntermediateDirectories: false, attributes: nil)
+                    
+                    let destFileName = "/\(extractionPath.path)/\(packageID)_\(version)_\(architecture).deb"
+                    let destURL = URL(fileURLWithPath: destFileName)
+                    NSLog("SileoLog: destURL=\(destURL.path)")
+                    try! FileManager.default.moveItem(at: fileURL, to: destURL)
             
-            if package.sourceRepo?.preferredArch==roothideArch {
-                return true
+                    let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
+                    
+                    //for ipad, don't touch
+                    let sv = TabBarController.singleton!.view!
+                    activity.popoverPresentationController?.sourceView = sv
+                    activity.popoverPresentationController?.sourceRect = CGRect(x: sv.bounds.midX, y: sv.bounds.height, width: 0, height: 0)
+                    activity.popoverPresentationController?.permittedArrowDirections = UIPopoverArrowDirection.down
+                    
+                    
+                    var controller:UIViewController = TabBarController.singleton!
+                    while controller.presentedViewController != nil {
+                        controller = controller.presentedViewController!
+                    }
+                    controller.present(activity, animated: true)
+                    
+                })
             }
         }
         
-        return false;
+        
+        var filename = package.filename ?? ""
+        
+        var packageRepo: Repo?
+        for repo in RepoManager.shared.repoList where repo.rawEntry == package.sourceFile {
+            packageRepo = repo
+        }
+        
+        if package.package.contains("/") {
+            finishDownload(fileURL: URL(fileURLWithPath: package.package))
+            return
+        } else if !filename.hasPrefix("https://") && !filename.hasPrefix("http://") {
+            filename = URL(string: packageRepo?.rawURL ?? "")?.appendingPathComponent(filename).absoluteString ?? ""
+        }
+        
+        // See if theres an overriding web URL for downloading the package from
+        self.overrideDownloadURL(package: package, repo: packageRepo) { errorMessage, url in
+            if url == nil && errorMessage != nil {
+                updateMsg(msg: "\(errorMessage)")
+                return
+            }
+            let downloadURL = url ?? URL(string: filename)
+            NSLog("SileoLog: downloadURL=\(downloadURL)")
+            task = RepoManager.shared.queue(from: downloadURL, progress: { progress in
+                updateMsg(msg: "\(Int(progress.fractionCompleted * 100))% ...")
+            }, success: { fileURL in
+                
+                let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+                let fileSize = attributes?[FileAttributeKey.size] as? Int
+                let fileSizeStr = String(format: "%ld", fileSize ?? 0)
+                
+                if !package.package.contains("/") && (fileSizeStr != package.size) {
+                    let failureReason = String(format: String(localizationKey: "Download_Size_Mismatch", type: .error),
+                                               package.size ?? "nil", fileSizeStr)
+                    updateMsg(msg: "\(failureReason)")
+                } else {
+                    finishDownload(fileURL: fileURL)
+                }
+                
+            }, failure: { statusCode, error in
+                let failureReason = error?.localizedDescription ?? String(format: String(localizationKey: "Download_Failing_Status_Code", type: .error), statusCode)
+                
+                updateMsg(msg: "\(failureReason)")
+                
+            }, waiting: { message in
+                updateMsg(msg: "\(message)")
+            })
+            task?.resume()
+        }
     }
     
     public func add(package: Package, queue: DownloadManagerQueue, approved: Bool = false) {
-        NSLog("SileoLog: addPackage=\(package.name), queue=\(queue.rawValue), approved=\(approved) package=\(package.package), depends=\(package.rawControl["depends"])")
+        NSLog("SileoLog: addPackage=\(package.name), queue=\(queue.rawValue), approved=\(approved) package=\(package.package), repo=\(package.sourceRepo?.url) depends=\(package.rawControl["depends"])")
         //Thread.callStackSymbols.forEach{NSLog("SileoLog: callstack=\($0)")}
+
+        CanisterResolver.shared.ingest(packages: [package])
         
         if queue != .uninstallations && queue != .uninstalldeps {
             if !checkRootHide(package) {
                 DispatchQueue.main.async {
                     NSLog("SileoLog: not updated for roothide")
-                    let title = String(localizationKey: "RootHide")
-                    let msg = String(localizationKey: "this package has not been updated for RootHide, please contact its developer.")
+                    
+                    let title = String(localizationKey: "Not Updated")
+                    
+                    let msg = ["apt.procurs.us","ellekit.space"].contains(package.sourceRepo?.url?.host) ? String(localizationKey: "please contact @RootHideDev to update it") : String(localizationKey: "You can contact the developer of this package to update it for roothide, or you can try to convert it via roothide Patcher.")
                     
                     let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
-                    let okAction = UIAlertAction(title: String(localizationKey: "OK"), style: .cancel) { _ in
+                    
+                    let installedPatcher = PackageListManager.shared.installedPackage(identifier: "com.roothide.patcher") != nil
+                    
+                    let patchAction = UIAlertAction(title: String(localizationKey: installedPatcher ? "Convert" : "Get Patcher"), style: .destructive) { _ in
+                        alert.dismiss(animated: true, completion: {
+                            var presentModally = false
+                            if installedPatcher {
+                                self.patchPackage(package: package)
+                            }
+                            else if let packageview = URLManager.viewController(url: URL(string: "sileo://package/com.roothide.patcher"), isExternalOpen: true, presentModally: &presentModally) {
+                                
+                                var controller:UIViewController = TabBarController.singleton!
+                                while controller.presentedViewController != nil {
+                                    controller = controller.presentedViewController!
+                                }
+                                controller.present(packageview, animated: true)
+                            }
+                        })
+                    }
+                    
+                    if ["apt.procurs.us","ellekit.space"].contains(package.sourceRepo?.url?.host)==false {
+                        alert.addAction(patchAction)
+                    }
+                    
+                    let okAction = UIAlertAction(title: (package.sourceRepo?.url?.host == "apt.procurs.us") ? String(localizationKey: "OK") : String(localizationKey: "Cancel"), style: .cancel) { _ in
                         alert.dismiss(animated: true, completion: nil)
                     }
                     alert.addAction(okAction)
+                    
                     var controller:UIViewController = TabBarController.singleton!
                     while controller.presentedViewController != nil {
                         controller = controller.presentedViewController!

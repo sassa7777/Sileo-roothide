@@ -439,7 +439,10 @@ final class RepoManager {
         }
 
         let request = URLManager.urlRequest(url)
-        guard let task = EvanderDownloader(request: request) else { return nil }
+        guard let task = EvanderDownloader(request: request) else {
+            NSLog("SileoLog: EvanderDownloader init failed for \(url)")
+            return nil
+        }
         task.progressCallback = { responseProgress in
             progress?(responseProgress)
         }
@@ -448,7 +451,7 @@ final class RepoManager {
             Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
 
             if let url = url {
-                //try? FileManager.default.removeItem(at: url)
+                try? FileManager.default.removeItem(at: url)
             }
             failure(status, error)
         }
@@ -556,6 +559,7 @@ final class RepoManager {
         
         let errorOutput = NSMutableAttributedString()
         func log(_ message: String, type: LogType) {
+            NSLog("SileoLog: \(type)=\(message)")
             errorOutput.append(NSAttributedString(
                 string: "\(type): \(message)\n",
                 attributes: [.foregroundColor: type.color])
@@ -608,6 +612,7 @@ final class RepoManager {
                     var releaseGPGFileURL: URL?
 
                     let releaseURL = URL(string: repo.repoURL)!.appendingPathComponent("Release")
+                    NSLog("SileoLog: releaseURL=\(releaseURL)")
                     let releaseTask = self.queue(
                         from: releaseURL,
                         progress: { progress in
@@ -662,7 +667,8 @@ final class RepoManager {
                                 errorsFound = true
                                 return
                             }
-
+                            
+                            NSLog("SileoLog: optReleaseFile= \(fileURL), \(releaseDict)")
                             optReleaseFile = (fileURL, releaseDict)
 
                             repo.releaseProgress = 1
@@ -715,7 +721,7 @@ final class RepoManager {
                                 repo.packagesProgress = CGFloat(progress.fractionCompleted)
                                 self.postProgressNotification(repo)
                             } else {
-                                EvanderDownloadDelegate.shared.terminate(url)
+                                EvanderDownloadDelegate.shared.terminate(url) //url may changed (HTTP Redirect)
                             }
                         },
                         success: { succeededURL, fileURL in
@@ -865,6 +871,7 @@ final class RepoManager {
                     releaseTask?.cancel()
                     releaseGPGTask?.cancel()
                     guard let releaseFile = optReleaseFile else {
+                        NSLog("SileoLog: optReleaseFile=\(optReleaseFile)")
                         log("Could not find release file for \(repo.repoURL)", type: .error)
                         errorsFound = true
                         reposUpdated += 1

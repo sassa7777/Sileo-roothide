@@ -193,7 +193,7 @@ final class CanisterResolver {
             self.package_version = package.version
             self.package_author = package.author?.string
             self.package_maintainer = package.maintainer?.string
-            self.repository_uri = package.sourceRepo?.displayURL
+            self.repository_uri = package.sourceRepo?.displayURL ?? "file:///var/lib/dpkg/status"
         }
         
     }
@@ -222,7 +222,11 @@ final class CanisterResolver {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.httpBody = data
         
-        EvanderNetworking.request(request: urlRequest, type: [String: Any].self) { _, _, _, _ in }
+        NSLog("SileoLog: ingest request: \(UIDevice.current.headers)")
+        NSLog("SileoLog: ingest body: \(String(data: data, encoding: String.Encoding.utf8))")
+        EvanderNetworking.request(request: urlRequest, type: [String: Any].self) { success, statusCode, error, returnData in
+            NSLog("SileoLog: ingest response: \(success),\(statusCode),\(error),\(returnData)")
+        }
          
     }
     

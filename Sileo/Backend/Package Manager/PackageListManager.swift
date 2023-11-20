@@ -112,6 +112,11 @@ final class PackageListManager {
             guard let latestPackage = self.newestPackage(identifier: package.packageID, repoContext: nil) else {
                 continue
             }
+            
+            if !checkRootHide(latestPackage) {
+                continue
+            }
+            
             if latestPackage.version != package.version {
                 if DpkgWrapper.isVersion(latestPackage.version, greaterThan: package.version) {
                     updatesAvailable.append((latestPackage, package))
@@ -286,11 +291,16 @@ final class PackageListManager {
                 dict[package.packageID] = package
             } else {
                 if let otherPkg = dict[packageID] {
-                    if DpkgWrapper.isVersion(package.version, greaterThan: otherPkg.version) {
-                        package.addOld(from: otherPkg)
+                    //if DpkgWrapper.isVersion(package.version, greaterThan: otherPkg.version) {
+                    if preferredPackage(old: otherPkg, new: package) {
+                        if package.architecture==otherPkg.architecture {
+                            package.addOld(from: otherPkg)
+                        }
                         dict[packageID] = package
                     } else {
-                        otherPkg.addOld(from: package)
+                        if package.architecture==otherPkg.architecture {
+                            otherPkg.addOld(from: package)
+                        }
                     }
                 } else {
                     dict[packageID] = package
@@ -300,26 +310,7 @@ final class PackageListManager {
 
         return dict
     }
-    
-    func preferredPackage(old: Package, new: Package) -> Bool {
-        if Bootstrap.roothide {
-            let dpkgArch = DpkgWrapper.architecture.primary.rawValue
-            let preferredNew = (new.architecture==dpkgArch ?1:0) + (new.architecture=="all" ?1:0) + (new.sourceRepo?.preferredArch==dpkgArch ?1:0)
-            let preferredOld = (old.architecture==dpkgArch ?1:0) + (old.architecture=="all" ?1:0) + (old.sourceRepo?.preferredArch==dpkgArch ?1:0)
-            if preferredNew==preferredOld {
-                if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
-                    return true
-                }
-            } else if preferredNew > preferredOld {
-                return true;
-            }
-        } else if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
-            return true;
-        }
-        
-        return false
-    }
-    
+
     public func packageList(identifier: String = "", search: String? = nil, sortPackages sort: Bool = false, repoContext: Repo? = nil, lookupTable: [String: [Package]]? = nil, packagePrepend: [Package]? = nil) -> [Package] {
         NSLog("SileoLog: packageList=\(identifier),\(search),\(sort),\(repoContext),\(lookupTable?.count),\(packagePrepend) : \(lookupTable)")
         var packageList = [Package]()
@@ -348,7 +339,11 @@ final class PackageListManager {
                 packageList = repoContext?.packageArray ?? allPackagesArray
             }
         }
-        if identifier.hasPrefix("category:") {
+        if identifier=="--contextInstalled" {
+            packageList = packageList.filter({ installedPackages.keys.contains($0.packageID) })
+        } else if identifier=="--contextRootHide" {
+            packageList = packageList.filter({ $0.architecture == DpkgWrapper.architecture.primary.rawValue })
+        } else if identifier.hasPrefix("category:") {
             let index = identifier.index(identifier.startIndex, offsetBy: 9)
             let category = PackageListManager.humanReadableCategory(String(identifier[index...]))
             packageList = packageList.filter({ $0.section == category })
@@ -374,6 +369,9 @@ final class PackageListManager {
                 return true
             }
         }
+        for p in packageList {
+            NSLog("SileoLog: packageList=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
+        }
         // Remove Any Duplicates
         var temp = [String: Package]()
         for package in packageList {
@@ -389,9 +387,9 @@ final class PackageListManager {
         if sort {
             packageList = sortPackages(packages: packageList, search: search)
         }
-//        for p in packageList {
-//            NSLog("SileoLog: packageList=\(p.package) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
-//        }
+        for p in packageList {
+            NSLog("SileoLog: packageList2=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
+        }
         return packageList
     }
     
@@ -496,9 +494,10 @@ final class PackageListManager {
         if let packages = (repoContext?.packageArray ?? packages) {
             for identifier in identifiers {
                 rawPackages += packages.filter { $0.packageID == identifier }
-                if let package = localPackages[identifier] {
-                    rawPackages.append(package)
-                }
+                //why need local packages if we use repo or packages array
+//                if let package = localPackages[identifier] {
+//                    rawPackages.append(package)
+//                }
             }
             
             if sorted {
@@ -552,13 +551,41 @@ final class PackageListManager {
         let downloadMan = DownloadManager.shared
         var upgrades = Set<Package>()
         
+        var incompatible = false
+        
         for packagePair in updatesNotIgnored {
             let newestPkg = packagePair.0
             
             if let installedPkg = packagePair.1, installedPkg == newestPkg {
                 continue
             }
-            upgrades.insert(newestPkg)
+            
+            if checkRootHide(newestPkg) {
+                upgrades.insert(newestPkg)
+            } else {
+                incompatible = true
+            }
+        }
+        
+        if incompatible && upgrades.count==0 {
+            DispatchQueue.main.async {
+                
+                completion?()
+                
+                let alert = UIAlertController(title: "", message: "No RootHide Package(s)", preferredStyle: .alert)
+                
+                let okAction = UIAlertAction(title: String(localizationKey: "OK"), style: .default) { _ in
+                    alert.dismiss(animated: true, completion: nil)
+                }
+                alert.addAction(okAction)
+                
+                var controller:UIViewController = TabBarController.singleton!
+                while controller.presentedViewController != nil {
+                    controller = controller.presentedViewController!
+                }
+                controller.present(alert, animated: true)
+            }
+            return
         }
         
         downloadMan.upgradeAll(packages: upgrades) {
@@ -570,4 +597,61 @@ final class PackageListManager {
             }
         }
     }
+}
+
+
+func preferredPackage(old: Package, new: Package) -> Bool {
+    if Bootstrap.roothide {
+        let dpkgArch = DpkgWrapper.architecture.primary.rawValue
+        let preferredNew = (new.architecture==dpkgArch ?1:0) + (new.architecture=="all" ?1:0) + (new.sourceRepo?.preferredArch==dpkgArch ?1:0)
+        let preferredOld = (old.architecture==dpkgArch ?1:0) + (old.architecture=="all" ?1:0) + (old.sourceRepo?.preferredArch==dpkgArch ?1:0)
+        if preferredNew==preferredOld {
+            if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
+                return true
+            }
+        } else if preferredNew > preferredOld {
+            return true;
+        }
+    } else if DpkgWrapper.isVersion(new.version, greaterThan: old.version) {
+        return true;
+    }
+    
+    return false
+}
+
+
+func checkRootHide(_ package: Package) -> Bool {
+
+//        NSLog("SileoLog: package.rawControl=\(package.rawControl)")
+//        var found=false
+//        if let depends = package.rawControl["depends"] {
+//            let parts = depends.components(separatedBy: CharacterSet(charactersIn: ",|"))
+//            for part in parts {
+//                let newPart = part.replacingOccurrences(of: "\\(.*\\)", with: "", options: .regularExpression).replacingOccurrences(of: " ", with: "")
+//                if newPart=="roothide" {
+//                    found = true
+//                }
+//            }
+//        }
+//        return found
+    
+    NSLog("SileoLog: checkRootHide=\(package.package)(\(package.architecture)):\(package.sourceRepo), \(package.sourceRepo?.repoName), \(package.sourceRepo?.displayName), \(package.sourceRepo?.rawURL), \(package.sourceRepo?.displayURL), \(package.sourceRepo?.repoURL)")
+    
+    let roothideArch = DPKGArchitecture.Architecture.roothide.rawValue
+    
+    if package.architecture==roothideArch {
+        return true;
+    }
+    
+    if package.architecture=="all" {
+        if package.sourceRepo==nil { //local deb ?
+            return true
+        }
+        
+        if package.sourceRepo?.preferredArch==roothideArch {
+            return true
+        }
+    }
+    
+    return false;
 }

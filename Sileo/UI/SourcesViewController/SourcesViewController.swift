@@ -613,18 +613,26 @@ final class SourcesViewController: SileoViewController {
     
     func handleSourceAdd(urls: [URL], bypassFlagCheck: Bool) {
         func handleAdd() {
-            CanisterResolver.piracy(urls) { safe, piracy in
-                DispatchQueue.main.async {
-                    if !safe.isEmpty {
-                        let repos = RepoManager.shared.addRepos(with: safe)
-                        if !repos.isEmpty {
-                            self.reloadData()
-                            self.updateSpecific(repos)
-                        }
-                    }
-                    if !piracy.isEmpty {
-                        self.showFlaggedSourceWarningController(urls: piracy)
-                    }
+//            CanisterResolver.piracy(urls) { safe, piracy in
+//                DispatchQueue.main.async {
+//                    if !safe.isEmpty {
+//                        let repos = RepoManager.shared.addRepos(with: safe)
+//                        if !repos.isEmpty {
+//                            self.reloadData()
+//                            self.updateSpecific(repos)
+//                        }
+//                    }
+//                    if !piracy.isEmpty {
+//                        self.showFlaggedSourceWarningController(urls: piracy)
+//                    }
+//                }
+//            }
+            
+            DispatchQueue.main.async {
+                let repos = RepoManager.shared.addRepos(with: urls)
+                if !repos.isEmpty {
+                    self.reloadData()
+                    self.updateSpecific(repos)
                 }
             }
         }
@@ -717,9 +725,9 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
             titleView.autoresizingMask = .flexibleWidth
             headerView.addSubview(titleView)
             
-            let separatorView = SileoSeparatorView(frame: CGRect(x: 16, y: 35, width: 304, height: 1))
-            separatorView.autoresizingMask = .flexibleWidth
-            headerView.addSubview(separatorView)
+//            let separatorView = SileoSeparatorView(frame: CGRect(x: 16, y: 35, width: 304, height: 1))
+//            separatorView.autoresizingMask = .flexibleWidth
+//            headerView.addSubview(separatorView)
         }
         
         return headerView

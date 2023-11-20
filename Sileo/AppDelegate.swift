@@ -219,6 +219,13 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        
+        if let vc=self.window?.rootViewController?.presentedViewController {
+            if vc.isKind(of: UIActivityViewController.self) {
+                vc.dismiss(animated: true)
+            }
+        }
+        
         DispatchQueue.global(qos: .default).async {
             PackageListManager.shared.initWait()
             DispatchQueue.main.async {

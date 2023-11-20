@@ -181,7 +181,7 @@ class APTWrapper {
         for package in installs {
             var packagesStr = package.package.package + "=" + package.package.version
             if package.package.package.contains("/") {
-                packagesStr = (package.package.debPath != nil) ? rootfs(package.package.debPath) : rootfs(package.package.package)
+                packagesStr = (package.package.debPath != nil) ? rootfs(package.package.debPath!) : rootfs(package.package.package)
             }
             arguments.append(packagesStr)
         }

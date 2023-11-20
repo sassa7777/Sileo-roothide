@@ -11,7 +11,7 @@
 int order(char ch) {
     if (isalpha(ch)) {
         return ch;
-    } else if (ch == 126) {
+    } else if (ch == 126) { // '~'
         return -1;
     } else if (ch > 0) {
         return (int)ch + 256;
@@ -47,7 +47,7 @@ int verrevcmp(const char *val, const char *ref) {
         }
         
         // Skip past 0
-        while (*val == 48 && *val)
+        while (*val == 48 && *val) // '0'
             val++;
         while (*ref == 48 && *ref)
             ref++;
@@ -76,7 +76,7 @@ void parseVersion(char *version, int *length, char **error, struct DpkgVersion *
     int found = 0;
     int searchIdx = 0;
     for (; searchIdx < *length; searchIdx++) {
-        if (version[searchIdx] == 58) {
+        if (version[searchIdx] == 58) { // ':'
             found = 1;
             break;
         }
@@ -121,7 +121,7 @@ void parseVersion(char *version, int *length, char **error, struct DpkgVersion *
     found = 0;
 
     for (; searchIdx >= 0; searchIdx--) {
-        if (version[searchIdx] == 45) {
+        if (version[searchIdx] == 45) { // '-'
             found = 1;
             break;
         }

@@ -79,6 +79,7 @@
 		56A5989B214657A700677FCA /* ZKSwizzle.m in Sources */ = {isa = PBXBuildFile; fileRef = 56A5989A214657A700677FCA /* ZKSwizzle.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
 		56A5989D214657BB00677FCA /* WhiteBlur.m in Sources */ = {isa = PBXBuildFile; fileRef = 56A5989C214657BB00677FCA /* WhiteBlur.m */; };
 		842F23EF2AA3251B00EE2E9A /* libroothide.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 842F23ED2AA3250800EE2E9A /* libroothide.tbd */; };
+		84B37E1F2AFFBDFD00B2400E /* Evander in Frameworks */ = {isa = PBXBuildFile; productRef = 84B37E1E2AFFBDFD00B2400E /* Evander */; };
 		A8A0EA4B2665AAC900CD772C /* libzstd.1.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A8A0EA492665AAC900CD772C /* libzstd.1.tbd */; settings = {ATTRIBUTES = (Required, ); }; };
 		C305468621D6900C003E73FC /* PackageListHeader.xib in Resources */ = {isa = PBXBuildFile; fileRef = C305468521D6900C003E73FC /* PackageListHeader.xib */; };
 		C373923621D5E46900E6F704 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = C373923421D5E46900E6F704 /* Localizable.strings */; };
@@ -92,9 +93,6 @@
 		CFBC7FDF2220412A0066D501 /* NewsViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFBC7FDE222041290066D501 /* NewsViewController.xib */; };
 		CFE8CB14227433700066D501 /* NewsDateHeader.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFE8CB13227433700066D501 /* NewsDateHeader.xib */; };
 		CFE8CB162274589F0066D501 /* NewsArticlesViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = CFE8CB152274589F0066D501 /* NewsArticlesViewController.xib */; };
-		E10C54592707DC92008BD0AA /* Evander in Frameworks */ = {isa = PBXBuildFile; productRef = E10C54582707DC92008BD0AA /* Evander */; };
-		E10C545B2707DC9C008BD0AA /* Evander in Frameworks */ = {isa = PBXBuildFile; productRef = E10C545A2707DC9C008BD0AA /* Evander */; };
-		E10C545D2707DCA5008BD0AA /* Evander in Frameworks */ = {isa = PBXBuildFile; productRef = E10C545C2707DCA5008BD0AA /* Evander */; };
 		E1138BE92A3252ED00887BFE /* Dopamine@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = E1138BE52A3252ED00887BFE /* Dopamine@3x.png */; };
 		E1138BEA2A3252ED00887BFE /* Dopamine@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = E1138BE52A3252ED00887BFE /* Dopamine@3x.png */; };
 		E1138BEB2A3252ED00887BFE /* Dopamine@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = E1138BE52A3252ED00887BFE /* Dopamine@3x.png */; };
@@ -1294,6 +1292,7 @@
 		56A5989E2146584800677FCA /* WhiteBlur.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhiteBlur.h; sourceTree = "<group>"; };
 		842F23ED2AA3250800EE2E9A /* libroothide.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; path = libroothide.tbd; sourceTree = "<group>"; };
 		842F23EE2AA3250800EE2E9A /* roothide.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = roothide.h; sourceTree = "<group>"; };
+		84B37E1D2AFFBDDE00B2400E /* Evander */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Evander; path = Deps/Evander; sourceTree = "<group>"; };
 		84EC03382A51048500D3DDB3 /* libjbpath.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libjbpath.dylib; path = ../jbpath/.theos/obj/debug/libjbpath.dylib; sourceTree = "<group>"; };
 		A8A0EA492665AAC900CD772C /* libzstd.1.tbd */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = "sourcecode.text-based-dylib-definition"; path = libzstd.1.tbd; sourceTree = "<group>"; };
 		A8A0EA4A2665AAC900CD772C /* libzstd.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = libzstd.h; sourceTree = "<group>"; };
@@ -1658,7 +1657,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E10C545D2707DCA5008BD0AA /* Evander in Frameworks */,
 				E12818D826BBFAA500D2553B /* libz.tbd in Frameworks */,
 				E19D4C112A30FEBF00910265 /* Onboarding in Frameworks */,
 				E12818D926BBFAA500D2553B /* libbz2.tbd in Frameworks */,
@@ -1694,7 +1692,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E10C545B2707DC9C008BD0AA /* Evander in Frameworks */,
 				E14C5ED226680E090080BFCE /* libz.tbd in Frameworks */,
 				E19D4C0F2A30FEB800910265 /* Onboarding in Frameworks */,
 				E14C5EC8266803F30080BFCE /* libbz2.tbd in Frameworks */,
@@ -1727,8 +1724,8 @@
 				F18383F520FBFFB700450EED /* libiconv.tbd in Frameworks */,
 				E13638F72614F6E300698D55 /* SwipeCellKit in Frameworks */,
 				E162DA0627BE78CF00DDD3E4 /* Alderis in Frameworks */,
-				E10C54592707DC92008BD0AA /* Evander in Frameworks */,
 				E172ACE7279490DF0066933E /* Down in Frameworks */,
+				84B37E1F2AFFBDFD00B2400E /* Evander in Frameworks */,
 				E1C92EE5294B5B8B007079E8 /* liblzma.5.tbd in Frameworks */,
 				E1D90DC02A30E77400F8CBAF /* Onboarding in Frameworks */,
 				A8A0EA4B2665AAC900CD772C /* libzstd.1.tbd in Frameworks */,
@@ -1789,6 +1786,7 @@
 		4929234E2663353700B5B37A /* Deps */ = {
 			isa = PBXGroup;
 			children = (
+				84B37E1D2AFFBDDE00B2400E /* Evander */,
 				E1CB21F827236B7D00B3141C /* DepictionKit */,
 				E12FC0D2269A3F7D008A0A36 /* liblz4 */,
 				E14C5ED626680F340080BFCE /* liblzma */,
@@ -3284,7 +3282,6 @@
 				E128181326BBFAA500D2553B /* LNZTreeView */,
 				E128181526BBFAA500D2553B /* LNPopupController-Static */,
 				E128181726BBFAA500D2553B /* Alderis */,
-				E10C545C2707DCA5008BD0AA /* Evander */,
 				E172ACEA279490E90066933E /* Down */,
 				E19E230C29CCA9E7004A52FA /* ZippyJSON */,
 				E19D4C102A30FEBF00910265 /* Onboarding */,
@@ -3351,7 +3348,6 @@
 				E19A5353261743BA00BB8A69 /* SQLite */,
 				E19A5355261743BD00BB8A69 /* LNZTreeView */,
 				E19F95A1269245EB002ABB8C /* LNPopupController-Static */,
-				E10C545A2707DC9C008BD0AA /* Evander */,
 				E172ACE8279490E40066933E /* Down */,
 				E162DA0727BE78E100DDD3E4 /* Alderis */,
 				E19E230A29CCA9E0004A52FA /* ZippyJSON */,
@@ -3385,11 +3381,11 @@
 				E13638F62614F6E300698D55 /* SwipeCellKit */,
 				E1EA1CFE2615008100E56882 /* LNZTreeView */,
 				E19F959F269245E4002ABB8C /* LNPopupController-Static */,
-				E10C54582707DC92008BD0AA /* Evander */,
 				E172ACE6279490DF0066933E /* Down */,
 				E162DA0527BE78CF00DDD3E4 /* Alderis */,
 				E19E230829CCA9D5004A52FA /* ZippyJSON */,
 				E1D90DBF2A30E77400F8CBAF /* Onboarding */,
+				84B37E1E2AFFBDFD00B2400E /* Evander */,
 			);
 			productName = iTweak;
 			productReference = F149E0AD20B6040B005CA30B /* Sileo.app */;
@@ -3478,7 +3474,6 @@
 				E13638F52614F6E300698D55 /* XCRemoteSwiftPackageReference "SwipeCellKit" */,
 				E1EA1CFD2615008100E56882 /* XCRemoteSwiftPackageReference "LNZTreeView" */,
 				E19F959E269245CB002ABB8C /* XCRemoteSwiftPackageReference "LNPopupController" */,
-				E10C54572707DC92008BD0AA /* XCRemoteSwiftPackageReference "Evander" */,
 				E172ACE5279490DF0066933E /* XCRemoteSwiftPackageReference "Down" */,
 				E162DA0427BE78CF00DDD3E4 /* XCRemoteSwiftPackageReference "Alderis" */,
 				E19E230729CCA9D5004A52FA /* XCRemoteSwiftPackageReference "ZippyJSON" */,
@@ -5175,7 +5170,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.5;
+				MARKETING_VERSION = "2.5-11";
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5626,7 +5621,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.5;
+				MARKETING_VERSION = "2.5-11";
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5690,7 +5685,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = 2.5;
+				MARKETING_VERSION = "2.5-11";
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5790,14 +5785,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		E10C54572707DC92008BD0AA /* XCRemoteSwiftPackageReference "Evander" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/elihwyma/Evander";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 		E128180C26BBFAA500D2553B /* XCRemoteSwiftPackageReference "Cosmos" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/evgenyneu/Cosmos.git";
@@ -5921,19 +5908,8 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		E10C54582707DC92008BD0AA /* Evander */ = {
+		84B37E1E2AFFBDFD00B2400E /* Evander */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E10C54572707DC92008BD0AA /* XCRemoteSwiftPackageReference "Evander" */;
-			productName = Evander;
-		};
-		E10C545A2707DC9C008BD0AA /* Evander */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E10C54572707DC92008BD0AA /* XCRemoteSwiftPackageReference "Evander" */;
-			productName = Evander;
-		};
-		E10C545C2707DCA5008BD0AA /* Evander */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E10C54572707DC92008BD0AA /* XCRemoteSwiftPackageReference "Evander" */;
 			productName = Evander;
 		};
 		E128180B26BBFAA500D2553B /* Cosmos */ = {

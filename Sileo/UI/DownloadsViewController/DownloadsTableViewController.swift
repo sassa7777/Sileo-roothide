@@ -116,6 +116,15 @@ class DownloadsTableViewController: SileoViewController {
         cancelDownload?.layer.cornerRadius = 10
         showDetailsButton?.isHidden = true
         
+        //avoid button's backgroundColor changing when presenting a popover
+        confirmButton?.tintAdjustmentMode = .normal
+        cancelButton?.tintAdjustmentMode = .normal
+        completeButton?.tintAdjustmentMode = .normal
+        completeLaterButton?.tintAdjustmentMode = .normal
+        showDetailsButton?.tintAdjustmentMode = .normal
+        hideDetailsButton?.tintAdjustmentMode = .normal
+        cancelDownload?.tintAdjustmentMode = .normal
+        
         tableView?.register(DownloadsTableViewCell.self, forCellReuseIdentifier: "DownloadsTableViewCell")
         DownloadManager.shared.reloadData(recheckPackages: false)
     }
@@ -136,7 +145,6 @@ class DownloadsTableViewController: SileoViewController {
         cancelButton.isHighlighted = confirmButton.isHighlighted
         confirmButton.tintColor = UINavigationBar.appearance().tintColor
         confirmButton.isHighlighted = confirmButton.isHighlighted
-        
         completeButton?.tintColor = UINavigationBar.appearance().tintColor
         completeButton?.isHighlighted = completeButton?.isHighlighted ?? false
         cancelDownload?.tintColor = UINavigationBar.appearance().tintColor

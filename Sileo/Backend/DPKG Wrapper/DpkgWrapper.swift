@@ -155,7 +155,8 @@ class DpkgWrapper {
         Name: Bourne-Again SHell
         """
         #else
-        let (_, outputString, _) = spawn(command: CommandPath.dpkgdeb, args: ["dpkg-deb", "--field", rootfs("\(packageURL.path)")])
+        //the permission of control in some packages may be 000 so here we need run as root
+        let (_, outputString, _) = spawn(command: CommandPath.dpkgdeb, args: ["dpkg-deb", "--field", rootfs("\(packageURL.path)")], root: true)
         return outputString
         #endif
     }

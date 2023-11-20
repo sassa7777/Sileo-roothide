@@ -13,6 +13,9 @@ protocol PackageQueueButtonDataProvider: AnyObject {
 }
 
 class PackageQueueButton: PackageButton {
+    
+    static let actionPerformedNotification = Notification.Name("actionPerformedNotification")
+
     public weak var viewControllerForPresentation: UIViewController?
     public var package: Package? {
         didSet {
@@ -95,6 +98,8 @@ class PackageQueueButton: PackageButton {
 
                     downloadManager.add(package: package, queue: .installations)
                     downloadManager.reloadData(recheckPackages: true)
+                    
+                    NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
                 }))
             }
          }
@@ -197,6 +202,8 @@ class PackageQueueButton: PackageButton {
                             self.hapticResponse()
                             downloadManager.add(package: package, queue: .upgrades)
                             downloadManager.reloadData(recheckPackages: true)
+                            
+                            NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
                         }
                         actionItems.append(action)
                     } else if package.version == installedPackage.version {
@@ -209,6 +216,8 @@ class PackageQueueButton: PackageButton {
                             self.hapticResponse()
                             downloadManager.add(package: package, queue: .installations)
                             downloadManager.reloadData(recheckPackages: true)
+                            
+                            NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
                         }
                         actionItems.append(action)
                     }
@@ -220,6 +229,8 @@ class PackageQueueButton: PackageButton {
                 self.hapticResponse()
                 downloadManager.add(package: package, queue: .uninstallations)
                 downloadManager.reloadData(recheckPackages: true)
+                
+                NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
             }
             actionItems.append(action)
         } else {
@@ -252,6 +263,8 @@ class PackageQueueButton: PackageButton {
                     self.hapticResponse()
                     downloadManager.add(package: package, queue: .installations)
                     downloadManager.reloadData(recheckPackages: true)
+                    
+                    NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
                 }
                 actionItems.append(action)
             }
@@ -291,6 +304,9 @@ class PackageQueueButton: PackageButton {
             // but it's a already queued! user changed their mind about installing this new package => nuke it from the queue
             TabBarController.singleton?.presentPopupController()
             downloadManager.reloadData(recheckPackages: true)
+            
+            NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
+                
         } else if let installedPackage = installedPackage {
             // road clear to modify an installed package, now we gotta decide what modification
             let downloadPopup: UIAlertController! = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
@@ -306,6 +322,8 @@ class PackageQueueButton: PackageButton {
                                                           style: .default) { _ in
                             downloadManager.add(package: package, queue: .upgrades)
                             downloadManager.reloadData(recheckPackages: true)
+                            
+                            NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
                         }
                         downloadPopup.addAction(upgradeAction)
                     } else if package.version == installedPackage.version {
@@ -313,6 +331,8 @@ class PackageQueueButton: PackageButton {
                                                             style: .default) { _ in
                             downloadManager.add(package: package, queue: .installations)
                             downloadManager.reloadData(recheckPackages: true)
+                            
+                            NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
                         }
                         downloadPopup.addAction(reinstallAction)
                     }
@@ -322,6 +342,8 @@ class PackageQueueButton: PackageButton {
             let removeAction = UIAlertAction(title: String(localizationKey: "Package_Uninstall_Action"), style: .default, handler: { _ in
                 downloadManager.add(package: package, queue: .uninstallations)
                 downloadManager.reloadData(recheckPackages: true)
+                
+                NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
             })
             downloadPopup.addAction(removeAction)
             let cancelAction: UIAlertAction! = UIAlertAction(title: String(localizationKey: "Package_Cancel_Action"), style: .cancel)
@@ -357,6 +379,8 @@ class PackageQueueButton: PackageButton {
                 // here's new packages not yet queued & FREE
                 downloadManager.add(package: package, queue: .installations)
                 downloadManager.reloadData(recheckPackages: true)
+                
+                NotificationCenter.default.post(name: PackageQueueButton.actionPerformedNotification, object: nil)
             }
         }
     }

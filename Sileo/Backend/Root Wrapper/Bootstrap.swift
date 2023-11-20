@@ -13,7 +13,7 @@ enum Bootstrap: String, Codable {
     static let roothide = URL(fileURLWithPath: jbroot("/.procursus_strapped")).exists
     static let rootless = roothide||URL(fileURLWithPath: "/var/jb/.procursus_strapped").exists
     
-    case procursus = "Procursus"
+    case procursus = "Procursus(roothide)"
     case xina = "Procursus/Xina"
     case elucubratus = "Bingner/Elucubratus"
     case electra = "Electra/Chimera"

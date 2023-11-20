@@ -153,7 +153,7 @@ final public class MacRootWrapper {
     let spawnStatus = posix_spawn(&pid, command, &fileActions, nil, argv + [nil], proenv + [nil])
     #else
     // Weird problem with a weird workaround
-    let env = [ "PATH=/usr/bin:/usr/local/bin:/bin:/usr/sbin" ]
+    let env = [ "PATH=/usr/bin:/usr/local/bin:/bin:/usr/sbin", "LANG=C" ] //the output JSON of apt may be localized so that sileo can't parse, here we forece set it to en_US.UTF-8
     let envp: [UnsafeMutablePointer<CChar>?] = env.map { $0.withCString(strdup) }
     defer { for case let env? in envp { free(env) } }
     
@@ -242,6 +242,7 @@ final public class MacRootWrapper {
         let array = Array(UnsafeBufferPointer(start: buffer, count: bytesRead)) + [UInt8(0)]
         array.withUnsafeBufferPointer { ptr in
             let str = String(cString: unsafeBitCast(ptr.baseAddress, to: UnsafePointer<CChar>.self))
+            NSLog("SileoLog: error=\(str)")
             stderrStr += str
         }
     }

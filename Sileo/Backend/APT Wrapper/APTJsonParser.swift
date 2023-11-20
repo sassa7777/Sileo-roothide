@@ -11,13 +11,13 @@ import ZippyJSON
 enum APTParserErrors: LocalizedError {
     case missingSileoConf
     case blankRequest
-    case failedDataEncoding
+    case failedDataEncoding(data: String?=nil)
     case blankJsonOutput(error: String)
     
     var errorDescription: String? {
         switch self {
         case .blankJsonOutput(let error): return "APT was unable to find this package. Please try refreshing your sources\n \(error)"
-        case .failedDataEncoding: return "APT returned an invalid response that cannot be parsed."
+        case .failedDataEncoding(let data): return "APT returned an invalid response that cannot be parsed.\n\n\(data ?? "")"
         case .missingSileoConf: return "Your Sileo install is incomplete. Please reinstall"
         case .blankRequest: return "Internal Error: Blank Request sent for packages"
         }
@@ -80,7 +80,8 @@ struct APTBrokenPackage: Decodable, Hashable {
 
         // swiftlint:disable nesting
         enum Conflict: String, Decodable {
-            case preDepends = "Pre-Depends"
+            //case preDepends = "Pre-Depends"
+            case preDepends = "PreDepends"
             case recommends = "Recommends"
             case conflicts = "Conflicts"
             case replaces = "Replaces"
@@ -186,7 +187,7 @@ extension APTWrapper {
             // if it has a / that means it's the path which is a local install
             if downloadPackage.package.package.contains("/") {
                 // APT will take the raw package path for install
-                packageOperations.append((downloadPackage.package.debPath != nil) ? rootfs(downloadPackage.package.debPath) : rootfs(downloadPackage.package.package) )
+                packageOperations.append((downloadPackage.package.debPath != nil) ? rootfs(downloadPackage.package.debPath!) : rootfs(downloadPackage.package.package) )
             } else {
                 // Force the exact version of the package we downloaded from the repository
                 packageOperations.append("\(downloadPackage.package.packageID)=\(downloadPackage.package.version)")
@@ -218,20 +219,28 @@ extension APTWrapper {
         // If it's a full JSON object, we will parse it later
         for rawLine in rawOutput.components(separatedBy: "\n") {
             let cleanLine = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-
+            NSLog("SileoLog: cleanLine=\(cleanLine)")
             // Seperated JSON Objects parsing (Procursus)
             if cleanLine.hasPrefix("{") && cleanLine.hasSuffix("}") {
                 guard let data = cleanLine.data(using: .utf8) else {
                     // What the actual hell, oh well..
-                    throw APTParserErrors.failedDataEncoding
+                    throw APTParserErrors.failedDataEncoding(data: rawOutput)
                 }
-
+                
+                var decoded=false
                 if let operation = try? decoder.decode(APTOperation.self, from: data) {
+                    decoded=true
                     aptOutput.operations.append(operation)
                 }
 
                 if let error = try? decoder.decode(ErrorParserWrapper.self, from: data) {
+                    decoded=true
                     aptOutput.conflicts += error.brokenPackages
+                }
+                
+                if !decoded {
+                    //unknown?
+                    throw APTParserErrors.failedDataEncoding(data: rawOutput)
                 }
             }
         }
@@ -254,7 +263,7 @@ extension APTWrapper {
                 .appending("}") // Appended this because we cut it off in our substring
 
             guard let data = jsonObject.data(using: .utf8) else {
-                throw APTParserErrors.failedDataEncoding
+                throw APTParserErrors.failedDataEncoding(data: rawOutput)
             }
 
             let rawOutput = try decoder.decode(RawAPTOutput.self, from: data)

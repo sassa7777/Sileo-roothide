@@ -487,6 +487,9 @@ extension PackageListViewController: UICollectionViewDataSource {
             } else if section == 1 && !availableUpdates.isEmpty && !ignoredUpdates.isEmpty {
                 return .ignoredUpdates
             }
+            if packagesLoadIdentifier != "--installed" {
+                return .reallyBoringList
+            }
             return .packages
         }
         if loadProvisional {
@@ -538,6 +541,7 @@ extension PackageListViewController: UICollectionViewDataSource {
     }
     
     func collectionView(_ collectionView: UICollectionView, viewForSupplementaryElementOfKind kind: String, at indexPath: IndexPath) -> UICollectionReusableView {
+        NSLog("SileoLog: collectionView kind=\(kind) at=\(indexPath) id=\(packagesLoadIdentifier)")
         let section = findWhatFuckingSectionThisIs(indexPath.section)
         if section == .reallyBoringList {
             if kind == UICollectionView.elementKindSectionHeader {

@@ -56,7 +56,7 @@ class InstalledContentsTableViewCell: UITableViewCell {
     
     @objc public func openInFilza(_ sender: UIMenuController?) {
         guard let node = node else { return }
-        let url = URL(string: "filza://\(node.path)")!
+        let url = URL(string: "filza://\(jbroot(node.path))")!
         UIApplication.shared.open(url)
     }
     

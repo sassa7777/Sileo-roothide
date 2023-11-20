@@ -48,7 +48,7 @@ enum Jailbreak: String, Codable {
     
     // Fugu15
     case fugu15 = "Fugu15 (iOS 15)"
-    case dopamine = "Dopamine (iOS 15)"
+    case dopamine = "Dopamine-roothide (iOS 15)"
     
     // Bakera1n
     case bakera1n_rootless15 = "bakera1n Rootless (iOS 15)"

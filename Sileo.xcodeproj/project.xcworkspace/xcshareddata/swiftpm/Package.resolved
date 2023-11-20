@@ -29,15 +29,6 @@
         }
       },
       {
-        "package": "Evander",
-        "repositoryURL": "https://github.com/elihwyma/Evander",
-        "state": {
-          "branch": "main",
-          "revision": "0059e74d91e8574bee454e748ea6cc188e8b43db",
-          "version": null
-        }
-      },
-      {
         "package": "JJLISO8601DateFormatter",
         "repositoryURL": "https://github.com/michaeleisel/JJLISO8601DateFormatter",
         "state": {

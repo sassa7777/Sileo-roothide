@@ -195,11 +195,20 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                                                                     style: .done,
                                                                     target: self,
                                                                     action: #selector(PackageViewController.dismissImmediately))
+            
+            NotificationCenter.default.addObserver(self,
+                                                   selector: #selector(PackageViewController.dismissImmediately),
+                                                   name: PackageQueueButton.actionPerformedNotification,
+                                                   object: nil)
         }
 
         self.reloadData()
 
         self.viewDidLayoutSubviews()
+        
+        if let package=self.package {
+            CanisterResolver.shared.ingest(packages: [package])
+        }
     }
 
     @objc func updateSileoColors() {

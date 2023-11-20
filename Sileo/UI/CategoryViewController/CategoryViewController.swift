@@ -17,6 +17,7 @@ class CategoryViewController: SileoTableViewController {
     
     private var bannersView: FeaturedBannersView?
     private var showInstalled = false
+    private var showRootHide = false
     
     private var headerStackView: UIStackView?
     private var authenticationBannerView: PaymentAuthenticationBannerView?
@@ -78,6 +79,8 @@ class CategoryViewController: SileoTableViewController {
             var categoriesCountCache: [String: Int] = [:]
             let packages: [Package]?
             let installed: [Package]?
+            var roothided: [Package] = []
+            var archall: [Package] = []
             if let context = self.repoContext,
                   let url = context.url {
                 let betterContext = RepoManager.shared.repo(with: url) ?? context
@@ -96,10 +99,19 @@ class CategoryViewController: SileoTableViewController {
                 let loadIdentifier = "category:\(category)"
                 let count = categoriesCountCache[loadIdentifier] ?? 0
                 categoriesCountCache[loadIdentifier] = count + 1
+                
+                if package.architecture=="all" {
+                    archall.append(package)
+                }
+                if package.architecture==DpkgWrapper.architecture.primary.rawValue {
+                    roothided.append(package)
+                }
             }
             categoriesCountCache["--allCategories"] = packages?.count ?? 0
             categoriesCountCache["--contextInstalled"] = installed?.count ?? 0
+            categoriesCountCache["--contextRootHide"] = roothided.count
             self.showInstalled = !(installed?.isEmpty ?? true)
+            self.showRootHide = roothided.count>0 && (roothided.count+archall.count)<(packages?.count ?? 0)
             self.categoriesCountCache = categoriesCountCache
             self.categories = categories.sorted(by: { str1, str2 -> Bool in
                 str1.compare(str2) != .orderedDescending
@@ -209,12 +221,19 @@ class CategoryViewController: SileoTableViewController {
         showInstalled && (indexPath.row == 1)
     }
     
+    func isRootHide(indexPath: IndexPath) -> Bool {
+        showRootHide && (indexPath.row == (showInstalled ? 2 : 1))
+    }
+    
     func categoryName(indexPath: IndexPath) -> String {
         if self.isAllCategories(indexPath: indexPath) {
             return String(localizationKey: "All_Categories")
         }
         if self.isInstalled(indexPath: indexPath) {
             return String(localizationKey: "Installed_Packages")
+        }
+        if self.isRootHide(indexPath: indexPath) {
+            return String(localizationKey: "RootHide Compatible")
         }
         return categories?[indexPath.row  - buffer] ?? ""
     }
@@ -226,11 +245,14 @@ class CategoryViewController: SileoTableViewController {
         if self.isInstalled(indexPath: indexPath) {
             return "--contextInstalled"
         }
+        if self.isRootHide(indexPath: indexPath) {
+            return "--contextRootHide"
+        }
         return "category:\(self.categoryName(indexPath: indexPath))"
     }
 
     var buffer: Int {
-        showInstalled ? 2 : 1
+        (showInstalled ? 1:0) + (showRootHide ? 1:0) + 1
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -241,7 +263,9 @@ class CategoryViewController: SileoTableViewController {
         let loadIdentifier = self.loadIdentifier(forCategoryAt: indexPath)
         let packageCount = categoriesCountCache?[loadIdentifier]
         
-        let weight: UIFont.Weight = (self.isAllCategories(indexPath: indexPath) || self.isInstalled(indexPath: indexPath)) ? .semibold : .regular
+        let weight: UIFont.Weight = ( self.isAllCategories(indexPath: indexPath)
+                                     || self.isRootHide(indexPath: indexPath)
+                                     || self.isInstalled(indexPath: indexPath) ) ? .semibold : .regular
         if let textLabel = cell.textLabel {
             textLabel.font = UIFont.systemFont(ofSize: textLabel.font.pointSize, weight: weight)
             textLabel.text = categoryName

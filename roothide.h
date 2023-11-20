@@ -33,8 +33,8 @@ const char* jbroot(const char* path);
 const char* rootfs(const char* path);
 
 #ifdef __OBJC__
-NSString* __attribute__((overloadable)) jbroot(NSString* path);
-NSString* __attribute__((overloadable)) rootfs(NSString* path);
+NSString* _Nonnull __attribute__((overloadable)) jbroot(NSString* _Nonnull path);
+NSString* _Nonnull  __attribute__((overloadable)) rootfs(NSString* _Nonnull path);
 #endif
 
 #ifdef __cplusplus
