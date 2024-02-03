@@ -117,6 +117,7 @@ class PackageQueueButton: PackageButton {
     }
     
     @objc func updateInfo() {
+//        NSLog("SileoLog: updateInfo package=\(package?.package)")
         guard let package = package else {
             self.isEnabled = false
             return
@@ -124,6 +125,7 @@ class PackageQueueButton: PackageButton {
         installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
             
         purchased = paymentInfo?.purchased ?? false
+//        NSLog("SileoLog: purchased=\(purchased)")
         
         let queueFound = DownloadManager.shared.find(package: package)
         var prominent = false
@@ -234,31 +236,35 @@ class PackageQueueButton: PackageButton {
             }
             actionItems.append(action)
         } else {
+            NSLog("SileoLog: Package_Get_Action0 \(package.package) \(package.sourceRepo) \(package.commercial) \(purchased)")
             // here's new packages not yet queued
             if let repo = package.sourceRepo,
                 package.commercial && !purchased {
-                let buttonText = paymentInfo?.price ?? String(localizationKey: "Package_Get_Action")
-                let action = CSActionItem(title: buttonText,
-                                          image: UIImage(systemNameOrNil: "dollarsign.circle"),
-                                          style: .default) {
-                    self.hapticResponse()
-                    PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
-                        guard let provider = provider,
-                            error == nil else {
-                                return
-                        }
-                        if provider.isAuthenticated {
-                            self.initatePurchase(provider: provider)
-                        } else {
-                            self.authenticate(provider: provider)
-                        }
-                    }
-                }
-                actionItems.append(action)
+//"purchased" may not be updated yet, so don't show "Get" menu for commercial packages
+//                let buttonText = paymentInfo?.price ?? String(localizationKey: "Package_Get_Action")
+//                let action = CSActionItem(title: buttonText,
+//                                          image: UIImage(systemNameOrNil: "dollarsign.circle"),
+//                                          style: .default) {
+//                    NSLog("SileoLog: Package_Get_Action1 \(package.package)")
+//                    self.hapticResponse()
+//                    PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
+//                        guard let provider = provider,
+//                            error == nil else {
+//                                return
+//                        }
+//                        if provider.isAuthenticated {
+//                            self.initatePurchase(provider: provider)
+//                        } else {
+//                            self.authenticate(provider: provider)
+//                        }
+//                    }
+//                }
+//                actionItems.append(action)
             } else {
                 let action = CSActionItem(title: String(localizationKey: "Package_Get_Action"),
                                           image: UIImage(systemNameOrNil: "square.and.arrow.down"),
                                           style: .default) {
+                    NSLog("SileoLog: Package_Get_Action2 \(package.package)")
                     // here's new packages not yet queued & FREE
                     self.hapticResponse()
                     downloadManager.add(package: package, queue: .installations)
@@ -361,9 +367,13 @@ class PackageQueueButton: PackageButton {
                 }
             })
         } else {
+            NSLog("SileoLog: Package_Get_Action \(package.package) \(package.sourceRepo) \(package.commercial) \(purchased)")
             // here's new packages not yet queued
             if let repo = package.sourceRepo,
                 package.commercial && !purchased && !package.package.contains("/") {
+                
+                NSLog("SileoLog: Package_Get_Action3 \(package.package)")
+                
                 PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
                     guard let provider = provider,
                         error == nil else {
@@ -376,6 +386,7 @@ class PackageQueueButton: PackageButton {
                     }
                 }
             } else {
+                NSLog("SileoLog: Package_Get_Action4 \(package.package)")
                 // here's new packages not yet queued & FREE
                 downloadManager.add(package: package, queue: .installations)
                 downloadManager.reloadData(recheckPackages: true)

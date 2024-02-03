@@ -131,10 +131,11 @@ class DpkgWrapper {
         return true
     }
     
-    public class func ignoreUpdates(_ ignoreUpdates: Bool, package: String) {
+    public class func ignoreUpdates(_ ignoreUpdates: Bool, package: String) -> Bool {
         let ignoreCommand = ignoreUpdates ? "hold" : "unhold"
         let command = [CommandPath.aptmark, "\(ignoreCommand)", "\(package)"]
-        spawnAsRoot(args: command)
+        let (status,_,_) = spawnAsRoot(args: command)
+        return status==0
     }
     
     public class func rawFields(packageURL: URL) throws -> String {

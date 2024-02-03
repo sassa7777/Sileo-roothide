@@ -21,7 +21,11 @@ var searchHistory: [String] {
     }
 }
 
-class PackageListViewController: SileoViewController, UIGestureRecognizerDelegate {
+
+public class SileoScrollViewController: SileoViewController {
+}
+    
+class PackageListViewController: SileoScrollViewController, UIGestureRecognizerDelegate {
     @IBOutlet final var collectionView: UICollectionView?
     @IBOutlet final var downloadsButton: UIBarButtonItem?
     
@@ -40,6 +44,8 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
     final private var searchCache: [String: [Package]] = [:]
     final private var provisionalPackages: [ProvisionalPackage] = []
     final private var cachedInstalled: [Package]?
+    
+    public var refreshPackages = UIRefreshControl()
     
     private var displaySettings = false
     
@@ -106,7 +112,15 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
             }
         }
     }
-
+    
+    @IBAction func refreshInstalledPackages(_ sender: UIRefreshControl?) {
+        sender?.beginRefreshing()
+        PackageListManager.shared.installChange()
+        NotificationCenter.default.post(name: PackageListManager.stateChange, object: nil)
+        NotificationCenter.default.post(name: PackageListManager.installChange, object: nil)
+        sender?.endRefreshing()
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -193,6 +207,10 @@ class PackageListViewController: SileoViewController, UIGestureRecognizerDelegat
         tapRecognizer.delegate = self
         
         if let collectionView = collectionView {
+            if self.packagesLoadIdentifier == "--installed" {
+                refreshPackages.addTarget(self, action: #selector(refreshInstalledPackages(_:)), for: .valueChanged)
+                collectionView.refreshControl = refreshPackages
+            }
             collectionView.addGestureRecognizer(tapRecognizer)
             collectionView.register(UINib(nibName: "PackageCollectionViewCell", bundle: nil),
                                     forCellWithReuseIdentifier: "PackageListViewCellIdentifier")

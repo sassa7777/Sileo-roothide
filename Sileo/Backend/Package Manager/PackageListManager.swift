@@ -349,12 +349,12 @@ final class PackageListManager {
             packageList = packageList.filter({ $0.section == category })
         } else if identifier.hasPrefix("author:") {
             let index = identifier.index(identifier.startIndex, offsetBy: 7)
-            let authorEmail = String(identifier[index...])
+            let name = String(identifier[index...])
             packageList = packageList.filter {
-                guard let authorEmail = $0.author?.email else {
+                guard let authorName = $0.author?.name else {
                     return false
                 }
-                return authorEmail == authorEmail
+                return authorName == name
             }
         }
         if let searchQuery = search,
@@ -370,7 +370,7 @@ final class PackageListManager {
             }
         }
         for p in packageList {
-            NSLog("SileoLog: packageList=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
+            NSLog("SileoLog: packageList=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile) author:\(p.author?.string)")
         }
         // Remove Any Duplicates
         var temp = [String: Package]()

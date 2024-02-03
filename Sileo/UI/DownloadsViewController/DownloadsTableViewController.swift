@@ -190,6 +190,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.reloadControlsOnly()
             }
             if isDownloading {
+                NSLog("SileoLog: startMoreDownloads2")
                 DownloadManager.shared.startMoreDownloads()
             }
         }
@@ -364,6 +365,7 @@ class DownloadsTableViewController: SileoViewController {
         }
         isDownloading = true
     
+        NSLog("SileoLog: startMoreDownloads3")
         DownloadManager.shared.startMoreDownloads()
         DownloadManager.shared.reloadData(recheckPackages: false)
         DownloadManager.shared.queueStarted = true
@@ -519,7 +521,7 @@ class DownloadsTableViewController: SileoViewController {
                 }
                 usleep(useconds_t(50 * USEC_PER_SEC/1000))
             }
-            for file in DownloadManager.shared.cachedFiles {
+            for file in DownloadManager.shared.cachedFiles.raw {
                 deleteFileAsRoot(file)
             }
             PackageListManager.shared.installChange()

@@ -344,6 +344,7 @@ final class RepoManager {
     }
 
     private func _checkUpdatesInBackground(_ repos: [Repo]) {
+        NSLog("SileoLog: _checkUpdatesInBackground \(repos)")
         let metadataUpdateGroup = DispatchGroup()
         for repo in repos {
             metadataUpdateGroup.enter()
@@ -366,10 +367,10 @@ final class RepoManager {
                 }
             }
 
-            if repo.isIconLoaded {
-                metadataUpdateGroup.leave()
-            } else {
-                repo.isIconLoaded = true
+//            if repo.isIconLoaded {
+//                metadataUpdateGroup.leave()
+//            } else {
+//                repo.isIconLoaded = true
                 DispatchQueue.global().async {
                     @discardableResult func image(for url: URL, scale: CGFloat) -> Bool {
                         let cache = EvanderNetworking.imageCache(url, scale: scale)
@@ -409,7 +410,7 @@ final class RepoManager {
                     
                     metadataUpdateGroup.leave()
                 }
-            }
+//            }
         }
     }
 
@@ -428,13 +429,15 @@ final class RepoManager {
     @discardableResult
     func queue(
         from url: URL?,
-        progress: ((DownloadProgress) -> Void)?,
-        success: @escaping (URL) -> Void,
-        failure: @escaping (Int, Error?) -> Void,
-        waiting: ((String) -> Void)? = nil
+        progress: ((EvanderDownloader, DownloadProgress) -> Void)?,
+        success: @escaping (EvanderDownloader, URL) -> Void,
+        failure: @escaping (EvanderDownloader?, Int, Error?) -> Void,
+        waiting: ((EvanderDownloader, String) -> Void)? = nil
     ) -> EvanderDownloader? {
+        NSLog("SileoLog: queue EvanderDownloader \(url)")
+
         guard let url = url else {
-            failure(520, nil)
+            failure(nil, 520, nil)
             return nil
         }
 
@@ -443,23 +446,23 @@ final class RepoManager {
             NSLog("SileoLog: EvanderDownloader init failed for \(url)")
             return nil
         }
-        task.progressCallback = { responseProgress in
-            progress?(responseProgress)
+        task.progressCallback = { task, responseProgress in
+            progress?(task, responseProgress)
         }
-        task.errorCallback = { status, error, url in
-            NSLog("SileoLog: errorCallback=\(status) url=\(url) error=\(error)")
-            Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
+        task.errorCallback = { task, status, error, url in
+            NSLog("SileoLog: errorCallback=\(status) url=\(url) error=\(error) request=\(request)")
+//            Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
 
             if let url = url {
                 try? FileManager.default.removeItem(at: url)
             }
-            failure(status, error)
+            failure(task, status, error)
         }
-        task.didFinishCallback = { _, url in
-            success(url)
+        task.didFinishCallback = { task, _, url in
+            success(task, url)
         }
-        task.waitingCallback = { message in
-            waiting?(message)
+        task.waitingCallback = { task, message in
+            waiting?(task, message)
         }
         task.make()
         return task
@@ -468,13 +471,13 @@ final class RepoManager {
     func fetch(
         from url: URL,
         withExtensionsUntilSuccess extensions: [String],
-        progress: ((DownloadProgress) -> Void)?,
-        success: @escaping (URL, URL) -> Void,
-        failure: @escaping (Int, Error?) -> Void
-    ) {
+        progress: ((EvanderDownloader, DownloadProgress) -> Void)?,
+        success: @escaping (EvanderDownloader, URL, URL) -> Void,
+        failure: @escaping (EvanderDownloader?, Int, Error?) -> Void
+    ) -> EvanderDownloader? {
         guard !extensions.isEmpty else {
-            failure(404, nil)
-            return
+            failure(nil, 404, nil)
+            return nil
         }
         let fullURL: URL
         if extensions[0] == "" {
@@ -482,18 +485,20 @@ final class RepoManager {
         } else {
             fullURL = url.appendingPathExtension(extensions[0])
         }
-        queue(
+        let session = queue(
             from: fullURL,
             progress: progress,
-            success: {
-                success(fullURL, $0)
+            success: { task, url in
+                success(task, fullURL, url)
             },
-            failure: { status, error in
+            failure: { task, status, error in
                 let newExtensions = Array(extensions.dropFirst())
-                guard !newExtensions.isEmpty else { return failure(status, error) }
+                guard !newExtensions.isEmpty else { return failure(task, status, error) }
                 self.fetch(from: url, withExtensionsUntilSuccess: newExtensions, progress: progress, success: success, failure: failure)
             }
-        )?.resume()
+        )
+        session?.resume()
+        return session
     }
 
     private func repoRequiresUpdate(_ repo: Repo) -> Bool {
@@ -557,13 +562,16 @@ final class RepoManager {
             fixLists()
         }
         
+        let loglock = NSLock()
         let errorOutput = NSMutableAttributedString()
         func log(_ message: String, type: LogType) {
             NSLog("SileoLog: \(type)=\(message)")
+            loglock.lock()
             errorOutput.append(NSAttributedString(
                 string: "\(type): \(message)\n",
                 attributes: [.foregroundColor: type.color])
             )
+            loglock.unlock()
         }
 
         
@@ -615,11 +623,11 @@ final class RepoManager {
                     NSLog("SileoLog: releaseURL=\(releaseURL)")
                     let releaseTask = self.queue(
                         from: releaseURL,
-                        progress: { progress in
+                        progress: { task, progress in
                             repo.releaseProgress = CGFloat(progress.fractionCompleted)
                             self.postProgressNotification(repo)
                         },
-                        success: { fileURL in
+                        success: { task, fileURL in
                             defer {
                                 semaphore.signal()
                             }
@@ -674,7 +682,7 @@ final class RepoManager {
                             repo.releaseProgress = 1
                             self.postProgressNotification(repo)
                         },
-                        failure: { status, error in
+                        failure: { task, status, error in
                             defer {
                                 semaphore.signal()
                             }
@@ -713,18 +721,18 @@ final class RepoManager {
                     let extensions = ["xz", "lzma", "bz2", "gz", ""]
                     #endif
                     var breakOff = false
-                    packages.map { url in self.fetch(
+                    packages.map { url in let task=self.fetch(
                         from: url,
                         withExtensionsUntilSuccess: extensions,
-                        progress: { progress in
+                        progress: { task, progress in
                             if !breakOff {
                                 repo.packagesProgress = CGFloat(progress.fractionCompleted)
                                 self.postProgressNotification(repo)
                             } else {
-                                EvanderDownloadDelegate.shared.terminate(url) //url may changed (HTTP Redirect)
+                                task.cancel()
                             }
                         },
-                        success: { succeededURL, fileURL in
+                        success: { task, succeededURL, fileURL in
                             defer {
                                 if !breakOff {
                                     semaphore.signal()
@@ -750,7 +758,7 @@ final class RepoManager {
                                 self.postProgressNotification(repo)
                             }
                         },
-                        failure: { status, error in
+                        failure: { task, status, error in
                             defer {
                                 semaphore.signal()
                             }
@@ -765,11 +773,11 @@ final class RepoManager {
                     let releaseGPGURL = URL(string: repo.repoURL)!.appendingPathComponent("Release.gpg")
                     let releaseGPGTask = self.queue(
                         from: releaseGPGURL,
-                        progress: { progress in
+                        progress: { task, progress in
                             repo.releaseGPGProgress = CGFloat(progress.fractionCompleted)
                             self.postProgressNotification(repo)
                         },
-                        success: { fileURL in
+                        success: { task, fileURL in
                             defer {
                                 semaphore.signal()
                             }
@@ -777,7 +785,7 @@ final class RepoManager {
                             repo.releaseGPGProgress = 1
                             self.postProgressNotification(repo)
                         },
-                        failure: { status, error in
+                        failure: { task, status, error in
                             defer {
                                 semaphore.signal()
                             }
@@ -934,7 +942,7 @@ final class RepoManager {
                         }
                         let (shouldSkip, hash) = self.ignorePackages(repo: repo, packagesURL: packagesFile.url, type: succeededExtension, destinationPath: packagesFileDst, hashtype: hashToSave)
                         skipPackages = shouldSkip
-
+                        NSLog("SileoLog: skipPackages=\(skipPackages)")
                         func loadPackageData() {
                             if !skipPackages {
                                 do {
@@ -1087,7 +1095,7 @@ final class RepoManager {
             files.forEach(deleteFileAsRoot)
             #endif
             self.postProgressNotification(nil)
-            
+            NSLog("SileoLog: reposUpdated=\(reposUpdated)")
             if reposUpdated > 0 {
                 DownloadManager.aptQueue.async {
                     DatabaseManager.shared.saveQueue()

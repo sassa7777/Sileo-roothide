@@ -108,7 +108,7 @@ class APTWrapper {
         return false
 
         #else
-        //why use sh?
+        //why use sh? apt-key is a shell script
         let (_, output, _) = spawn(command: CommandPath.sh, args: ["sh", rootfs(CommandPath.aptkey), "verify", "-q", "--status-fd", "1", rootfs(key), rootfs(data)])
 
         let outputLines = output.components(separatedBy: "\n")
@@ -211,7 +211,7 @@ class APTWrapper {
             pipeObject.pipeCompletion = { status in
                 wrapper.resetConnection()
                 spawnAsRoot(args: [CommandPath.aptget, "clean"])
-                for file in DownloadManager.shared.cachedFiles {
+                for file in DownloadManager.shared.cachedFiles.raw {
                     deleteFileAsRoot(file)
                 }
                 completionCallback(Int(status), finish, false)
@@ -274,7 +274,8 @@ class APTWrapper {
                 }
             }
 
-            let environment = ["SILEO=6 1", "CYDIA=6 1", "PATH=/usr/bin:/usr/local/bin:/bin:/usr/sbin"]
+            //apt will overwrite PATH for dpkg
+            let environment = ["SILEO=6 1", "CYDIA=6 1", "PATH=/usr/bin:/rootfs/usr/bin:/usr/local/bin:/rootfs/usr/local/bin:/bin:/rootfs/bin:/usr/sbin:/rootfs/usr/sbin", "LANG=C"]
             let env: [UnsafeMutablePointer<CChar>?] = environment.map { $0.withCString(strdup) }
             defer {
                 for case let key? in env {
@@ -498,7 +499,7 @@ class APTWrapper {
             }
 
             spawnAsRoot(args: [CommandPath.aptget, "clean"])
-            for file in DownloadManager.shared.cachedFiles {
+            for file in DownloadManager.shared.cachedFiles.raw {
                 deleteFileAsRoot(file)
             }
             completionCallback(Int(status), finish, refreshSileo)

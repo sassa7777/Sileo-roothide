@@ -577,38 +577,42 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         }
         sharePopup.addAction(shareAction)
         
-        if let author = package.author,
-           let email = author.email {
-            let moreByDeveloper = UIAlertAction(title: String(localizationKey: "Package_Developer_Find_Action"
-            ), style: .default) { _ in
-                let packagesListController = PackageListViewController(nibName: "PackageListViewController", bundle: nil)
-                packagesListController.packagesLoadIdentifier = "author:\(email)"
-                packagesListController.title = String(format: String(localizationKey: "Packages_By_Author"),
-                                                      author.name ?? "")
-                self.navigationController?.pushViewController(packagesListController, animated: true)
+        if let author = package.author {
+            if let name = author.name {
+                 let moreByDeveloper = UIAlertAction(title: String(localizationKey: "Package_Developer_Find_Action"
+                 ), style: .default) { _ in
+                     let packagesListController = PackageListViewController(nibName: "PackageListViewController", bundle: nil)
+                     packagesListController.packagesLoadIdentifier = "author:\(name)"
+                     packagesListController.title = String(format: String(localizationKey: "Packages_By_Author"),
+                                                           author.name ?? "")
+                     self.navigationController?.pushViewController(packagesListController, animated: true)
+                 }
+                 sharePopup.addAction(moreByDeveloper)
+             
             }
-            sharePopup.addAction(moreByDeveloper)
-        
-            let packageSupport = UIAlertAction(title: String(localizationKey: "Package_Support_Action"), style: .default) { _ in
-                func unavailable() {
-                    let alertController = UIAlertController(title: String(localizationKey: "Email_Unavailable.Title", type: .error),
-                                                            message: String(localizationKey: "Email_Unavailable.Body", type: .error),
-                                                            preferredStyle: .alert)
-                    alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: nil))
-                    self.present(alertController, animated: true, completion: nil)
-                }
-                guard let subject = "Sileo/APT(M): \(package.name ?? package.package)".addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
-                      let email = email.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
-                      let url = URL(string: "mailto:\(email)?subject=\(subject)") else {
-                    return unavailable()
-                }
-                UIApplication.shared.open(url) { success in
-                    if !success {
-                        unavailable()
+            
+            if let email = author.email {
+                let packageSupport = UIAlertAction(title: String(localizationKey: "Package_Support_Action"), style: .default) { _ in
+                    func unavailable() {
+                        let alertController = UIAlertController(title: String(localizationKey: "Email_Unavailable.Title", type: .error),
+                                                                message: String(localizationKey: "Email_Unavailable.Body", type: .error),
+                                                                preferredStyle: .alert)
+                        alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .cancel, handler: nil))
+                        self.present(alertController, animated: true, completion: nil)
+                    }
+                    guard let subject = "Sileo/APT(M): \(package.name ?? package.package)".addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
+                          let email = email.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
+                          let url = URL(string: "mailto:\(email)?subject=\(subject)") else {
+                        return unavailable()
+                    }
+                    UIApplication.shared.open(url) { success in
+                        if !success {
+                            unavailable()
+                        }
                     }
                 }
+                sharePopup.addAction(packageSupport)
             }
-            sharePopup.addAction(packageSupport)
         }
         
         if installedPackage != nil,
@@ -617,14 +621,16 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 String(localizationKey: "Package_Hold_Disable_Action") : String(localizationKey: "Package_Hold_Enable_Action")
             let ignoreUpdates = UIAlertAction(title: ignoreUpdatesText, style: .default) { _ in
                 if self.installedPackage?.wantInfo == .hold {
-                    self.installedPackage?.wantInfo = .install
                     #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
-                    DpkgWrapper.ignoreUpdates(false, package: packageID)
+                    if DpkgWrapper.ignoreUpdates(false, package: packageID) {
+                        self.installedPackage?.wantInfo = .install
+                    }
                     #endif
                 } else {
-                    self.installedPackage?.wantInfo = .hold
                     #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
-                    DpkgWrapper.ignoreUpdates(true, package: packageID)
+                    if DpkgWrapper.ignoreUpdates(true, package: packageID) {
+                        self.installedPackage?.wantInfo = .hold
+                    }
                     #endif
                 }
                 NotificationCenter.default.post(Notification(name: PackageListManager.prefsNotification))

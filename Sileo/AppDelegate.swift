@@ -219,9 +219,10 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        
+        NSLog("SileoLog: openurl=\(url) options=\(options)")
         if let vc=self.window?.rootViewController?.presentedViewController {
-            if vc.isKind(of: UIActivityViewController.self) {
+            NSLog("SileoLog: presented=\(vc)")
+            if vc.isKind(of: UIActivityViewController.self) || vc.isKind(of: NativePackageViewController.self) || vc.isKind(of: UINavigationController.self) {
                 vc.dismiss(animated: true)
             }
         }
@@ -232,19 +233,24 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                 if url.scheme == "file" {
                     if url.pathExtension == "deb" {
                         // The file is a deb. Open the package view controller to that file.
-                        guard let tabBarController = self.window?.rootViewController as? UITabBarController,
-                              let featuredVc = tabBarController.viewControllers?[0] as? UINavigationController?,
-                              let featuredView = featuredVc?.viewControllers[0] as? FeaturedViewController else {
-                                  return
-                              }
-                        guard let package = PackageListManager.shared.package(url: url) else {
+                        var fileurl = url
+                        if options[UIApplication.OpenURLOptionsKey.openInPlace] as! Bool {
+                            let tmpdir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID.init().uuidString)
+                            let newurl = tmpdir.appendingPathComponent(url.lastPathComponent)
+                            try! FileManager.default.createDirectory(at: tmpdir, withIntermediateDirectories: false)
+                            try! FileManager.default.copyItem(at: url, to: newurl)
+                            NSLog("SileoLog: newurl=\(newurl)")
+                            fileurl = newurl
+                        }
+                        guard let package = PackageListManager.shared.package(url: fileurl) else {
                             let alert = UIAlertController(title: "Bad Deb", message: "The provided deb file could not be read", preferredStyle: .alert)
                             alert.addAction(UIAlertAction(title: "Ok", style: .cancel))
-                            featuredView.present(alert, animated: true)
+                            self.window?.rootViewController?.present(alert, animated: true, completion: nil)
                             return
                         }
-                        featuredView.showPackage(package)
-                        tabBarController.selectedIndex = 0
+                        let view = NativePackageViewController.viewController(for: package) as! PackageViewController
+                        view.isPresentedModally = true
+                        self.window?.rootViewController?.present(UINavigationController(rootViewController: view), animated: true, completion: nil)
                     } else {
                         guard let tabBarController = self.window?.rootViewController as? UITabBarController,
                               let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,

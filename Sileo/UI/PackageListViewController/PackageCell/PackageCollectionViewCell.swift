@@ -300,6 +300,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     }
 
     private func getAction(_ package: Package) -> SwipeAction {
+        NSLog("SileoLog: getAction \(package.package)");
         let install = SwipeAction(style: .default, title: String(localizationKey: "Package_Get_Action")) { _, _ in
             let queueFound = DownloadManager.shared.find(package: package)
             if queueFound != .none {
@@ -322,6 +323,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
                                                                    type: .error))
                         }
                         if purchased {
+                            NSLog("SileoLog: SwipeAction add(package")
                             DownloadManager.shared.add(package: package, queue: .installations)
                             DownloadManager.shared.reloadData(recheckPackages: true)
                         } else {
@@ -368,8 +370,10 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
                     return
                 }
                 if info.purchased {
-                    DownloadManager.shared.add(package: package, queue: .installations)
-                    DownloadManager.shared.reloadData(recheckPackages: true)
+//should add package in completion callback
+//                    NSLog("SileoLog: updatePurchaseStatus add(package: \(package)")
+//                    DownloadManager.shared.add(package: package, queue: .installations)
+//                    DownloadManager.shared.reloadData(recheckPackages: true)
                     if let completion = completion {
                         completion(nil, provider, true)
                     }

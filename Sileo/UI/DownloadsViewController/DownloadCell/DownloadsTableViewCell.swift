@@ -117,6 +117,7 @@ class DownloadsTableViewCell: BaseSubtitleTableViewCell {
         download.completed = false
         download.task = nil
         download.queued = false
+        NSLog("SileoLog: startMoreDownloads1")
         downloadMan.startMoreDownloads()
     }
     

@@ -207,6 +207,7 @@ final class SourcesViewController: SileoViewController {
     }
      
     @objc private func handleImageUpdate(_ notification: Notification) {
+        NSLog("SileoLog: handleImageUpdate \(notification.object)")
         if !Thread.isMainThread {
             DispatchQueue.main.async {
                 self.handleImageUpdate(notification)
@@ -218,6 +219,7 @@ final class SourcesViewController: SileoViewController {
         for cell in visibibleCells {
             guard let repo = cell.repo else { continue }
             if repo.rawURL == url {
+                NSLog("SileoLog: cell.image=\(repo.repoIcon)")
                 cell.image(repo)
                 return
             }
