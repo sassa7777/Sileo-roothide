@@ -661,6 +661,15 @@ final public class SafeDictionary<Key: Hashable, Value> {
         self.context = context
     }
     
+    public var raw: Dictionary<Key,Value> {
+        if !isOnQueue {
+            var result = Dictionary<Key,Value>()
+            queue.sync { result = self.dict }
+            return result
+        }
+        return dict
+    }
+    
     public subscript(key: Key) -> Value? {
         get {
             if !isOnQueue {
@@ -685,6 +694,14 @@ final public class SafeDictionary<Key: Hashable, Value> {
             queue.async(flags: .barrier) { [self] in dict.removeValue(forKey: key) }
         } else {
             dict.removeValue(forKey: key)
+        }
+    }
+    
+    public func removeAll() {
+        if !isOnQueue {
+            queue.async(flags: .barrier) { self.dict.removeAll() }
+        } else {
+            self.dict.removeAll()
         }
     }
 }

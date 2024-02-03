@@ -93,23 +93,25 @@ final public class EvanderNetworking {
             downloadCache,
             networkCache
         ])        
-        DispatchQueue.global(qos: .utility).async { [self] in
+//        DispatchQueue.global(qos: .utility).async { [self] in
             var combined = [URL]()
             combined += networkCache.implicitContents
-            let sevenDaysOld = Date(timeIntervalSinceNow: -2592000)
+            let sevenDaysOld = Date(timeIntervalSinceNow: -7*24*60*60)
             for content in combined {
                 if let modDate = content.modificationDate {
-                    if sevenDaysOld < modDate {
+                    if modDate < sevenDaysOld {
+                        NSLog("SileoLog: removeItem1 \(content)")
                         try? FileManager.default.removeItem(at: content)
                     }
                 }
             }
             if let contents = try? self.downloadCache.contents() {
                 for cached in contents {
+                    NSLog("SileoLog: removeItem2 \(cached)")
                     try? FileManager.default.removeItem(atPath: cached.path)
                 }
             }
-        }
+//        }
     }
 
     public struct CacheConfig {
