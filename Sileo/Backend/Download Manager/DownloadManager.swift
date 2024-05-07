@@ -665,13 +665,100 @@ final class DownloadManager {
         uninstalldeps.remove { $0.package.package == package }
     }
     
+    
+    public func checkRootlessV2(package: Package, fileURL: URL) {
+        NSLog("SileoLog: checkRootlessV2 \(package.package) \(fileURL)")
+        
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try! FileManager.default.createDirectory(at: temp, withIntermediateDirectories: false, attributes: nil)
+        
+        var (status, output, errorOutput) = spawn(command: CommandPath.dpkgdeb, args: ["dpkg-deb", "-R", rootfs(fileURL.path), rootfs(temp.path)], root: true)
+        guard status==0 else {return}
+        
+        let controlFilePath = temp.path.appending("/DEBIAN/control")
+        
+        spawn(command: CommandPath.chmod, args: ["chmod", "0666", rootfs(controlFilePath)], root: true)
+        spawn(command: CommandPath.chmod, args: ["chmod", "0777", rootfs(temp.path.appending("/DEBIAN"))], root: true)
+        
+        guard var controlFileData = try? String(contentsOfFile: controlFilePath, encoding: .utf8) else {
+            NSLog("SileoLog: read err \(controlFilePath)")
+            return
+        }
+        
+        controlFileData = controlFileData.replacingOccurrences(of: "Architecture: iphoneos-arm64", with: "Architecture: iphoneos-arm64e")
+        
+        do {
+            try controlFileData.write(toFile: controlFilePath, atomically: true, encoding: .utf8)
+        } catch {
+            NSLog("SileoLog: write err \(error)")
+            return
+        }
+        
+        spawn(command: CommandPath.chmod, args: ["chmod", "0644", rootfs(controlFilePath)], root: true)
+        spawn(command: CommandPath.chmod, args: ["chmod", "0755", rootfs(temp.path.appending("/DEBIAN"))], root: true)
+        
+        var newPkgPath = temp.path
+        if FileManager.default.fileExists(atPath: temp.path.appending("/var/jb")) {
+            newPkgPath = temp.path.appending("/var/jb")
+            spawn(command: CommandPath.mv, args: ["mv", "-f", rootfs(temp.path.appending("/DEBIAN")), rootfs(newPkgPath)], root: true)
+        }
+        
+        let outPath = temp.path.appending(".deb")
+        
+        (status, output, errorOutput) = spawn(command: CommandPath.dpkgdeb, args: ["dpkg-deb", "-b", rootfs(newPkgPath), rootfs(outPath)], root: true)
+        guard status==0 else {return}
+
+        guard let newPackage = PackageListManager.shared.package(url: URL(fileURLWithPath: outPath)) else {
+            return
+        }
+        
+        if checkRootHide(newPackage) {
+            newPackage.rootlessV2 = true
+            self.add(package: newPackage, queue: .installations)
+            self.reloadData(recheckPackages: true)
+        }
+    }
+    
+    public func patchPackage(package: Package, fileURL: URL) {
+            let packageID = self.aptEncoded(string: package.packageID, isArch: false)
+            let version = self.aptEncoded(string: package.version, isArch: false)
+            let architecture = self.aptEncoded(string: package.architecture ?? "", isArch: true)
+            
+            let extractionPath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+            try! FileManager.default.createDirectory(at: extractionPath, withIntermediateDirectories: false, attributes: nil)
+            
+            let destFileName = "/\(extractionPath.path)/\(packageID)_\(version)_\(architecture).deb"
+            let destURL = URL(fileURLWithPath: destFileName)
+            NSLog("SileoLog: destURL=\(destURL.path)")
+            try! FileManager.default.moveItem(at: fileURL, to: destURL)
+        
+            if IsAppAvailable("com.roothide.patcher") {
+                if ShareFileToApp("com.roothide.patcher", destFileName) {
+                    return
+                }
+            }
+    
+            let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
+            
+            //for ipad, don't touch
+            let sv = TabBarController.singleton!.view!
+            activity.popoverPresentationController?.sourceView = sv
+            activity.popoverPresentationController?.sourceRect = CGRect(x: sv.bounds.midX, y: sv.bounds.height, width: 0, height: 0)
+            activity.popoverPresentationController?.permittedArrowDirections = UIPopoverArrowDirection.down
+            
+            
+            var controller:UIViewController = TabBarController.singleton!
+            while controller.presentedViewController != nil && controller.presentedViewController?.isBeingDismissed==false {
+                controller = controller.presentedViewController!
+            }
+            controller.present(activity, animated: true)
+    }
+    
     // call in main queue
-    public func patchPackage(package: Package) {
+    public func downloadDeb(package: Package, msg: String, handler: @escaping ((Package,URL) -> Void)) {
         var task:EvanderDownloader?
         
-        let title = String(localizationKey: "Downloading_Package_Status")
-        let msg = "\n \(String(localizationKey: "Downloading_Package_Status")) ...\n"
-        let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
+        let alert = UIAlertController(title: msg, message: msg, preferredStyle: .alert)
         
         let cancel = UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel) { _ in
             alert.dismiss(animated: true, completion: nil)
@@ -680,7 +767,7 @@ final class DownloadManager {
         alert.addAction(cancel)
         
         var controller:UIViewController = TabBarController.singleton!
-        while controller.presentedViewController != nil {
+        while controller.presentedViewController != nil && controller.presentedViewController?.isBeingDismissed==false {
             controller = controller.presentedViewController!
         }
         
@@ -696,39 +783,13 @@ final class DownloadManager {
         func finishDownload(fileURL: URL) {
             NSLog("SileoLog: finishDownload=\(fileURL.path)")
             DispatchQueue.main.async {
-                alert.dismiss(animated: true, completion: {
-                    let packageID = self.aptEncoded(string: package.packageID, isArch: false)
-                    let version = self.aptEncoded(string: package.version, isArch: false)
-                    let architecture = self.aptEncoded(string: package.architecture ?? "", isArch: true)
-                    
-                    let extractionPath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-                    try! FileManager.default.createDirectory(at: extractionPath, withIntermediateDirectories: false, attributes: nil)
-                    
-                    let destFileName = "/\(extractionPath.path)/\(packageID)_\(version)_\(architecture).deb"
-                    let destURL = URL(fileURLWithPath: destFileName)
-                    NSLog("SileoLog: destURL=\(destURL.path)")
-                    try! FileManager.default.moveItem(at: fileURL, to: destURL)
-            
-                    let activity = UIActivityViewController(activityItems: [destURL], applicationActivities: nil)
-                    
-                    //for ipad, don't touch
-                    let sv = TabBarController.singleton!.view!
-                    activity.popoverPresentationController?.sourceView = sv
-                    activity.popoverPresentationController?.sourceRect = CGRect(x: sv.bounds.midX, y: sv.bounds.height, width: 0, height: 0)
-                    activity.popoverPresentationController?.permittedArrowDirections = UIPopoverArrowDirection.down
-                    
-                    
-                    var controller:UIViewController = TabBarController.singleton!
-                    while controller.presentedViewController != nil {
-                        controller = controller.presentedViewController!
-                    }
-                    controller.present(activity, animated: true)
-                    
+                    alert.dismiss(animated: true, completion: {
+                        handler(package,fileURL)
                 })
             }
         }
         
-        
+
         var filename = package.filename ?? ""
         
         var packageRepo: Repo?
@@ -787,6 +848,13 @@ final class DownloadManager {
         
         if queue != .uninstallations && queue != .uninstalldeps {
             if !checkRootHide(package) {
+                
+                if package.tags.contains(.roothide) && FileManager.default.fileExists(atPath: jbroot("/usr/lib/libroot.dylib")) {
+                    NSLog("SileoLog: roothide suppport: \(package.package)")
+                    self.downloadDeb(package:package, msg: String(localizationKey: "Loading"), handler: self.checkRootlessV2)
+                    return
+                }
+                
                 DispatchQueue.main.async {
                     NSLog("SileoLog: not updated for roothide: \(package.package) \(package.architecture)")
                     
@@ -802,12 +870,12 @@ final class DownloadManager {
                         alert.dismiss(animated: true, completion: {
                             var presentModally = false
                             if installedPatcher {
-                                self.patchPackage(package: package)
+                                self.downloadDeb(package:package, msg: String(localizationKey: "Downloading_Package_Status"), handler: self.patchPackage)
                             }
                             else if let packageview = URLManager.viewController(url: URL(string: "sileo://package/com.roothide.patcher"), isExternalOpen: true, presentModally: &presentModally) {
                                 
                                 var controller:UIViewController = TabBarController.singleton!
-                                while controller.presentedViewController != nil {
+                                while controller.presentedViewController != nil && controller.presentedViewController?.isBeingDismissed==false {
                                     controller = controller.presentedViewController!
                                 }
                                 controller.present(packageview, animated: true)
@@ -825,7 +893,7 @@ final class DownloadManager {
                     alert.addAction(okAction)
                     
                     var controller:UIViewController = TabBarController.singleton!
-                    while controller.presentedViewController != nil {
+                    while controller.presentedViewController != nil && controller.presentedViewController?.isBeingDismissed==false {
                         controller = controller.presentedViewController!
                     }
                     controller.present(alert, animated: true)

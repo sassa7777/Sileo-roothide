@@ -1,6 +1,7 @@
 #import "UIColor+HTMLColors.h"
 #import "WhiteBlur.h"
 #import "ControlFileParserFast.h"
+#import "AppFileShare.h"
 
 #include <spawn.h>
 #import "dpkgversion.h"

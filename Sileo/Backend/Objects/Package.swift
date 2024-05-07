@@ -33,6 +33,7 @@ final class Package: PackageProtocol {
     public var installedSize: Int?
     public var tags: PackageTags = .none
     public var nativeDepiction: URL?
+    public var rootlessV2: Bool = false
     
     public var allVersionsInternal = [String: Package]()
     public var allVersions: [Package] {

@@ -9,6 +9,7 @@
 import UIKit
 import Evander
 
+
 class DownloadsTableViewController: SileoViewController {
     @IBOutlet var footerView: UIView?
     @IBOutlet var cancelButton: UIButton?
@@ -84,6 +85,8 @@ class DownloadsTableViewController: SileoViewController {
     
     public override func viewDidLoad() {
         super.viewDidLoad()
+        
+        self.detailsTextView?.delegate = self
         
         let statusBarView = SileoRootView(frame: .zero)
         self.view.addSubview(statusBarView)
@@ -425,7 +428,11 @@ class DownloadsTableViewController: SileoViewController {
         }
         guard let action = actions.first(where: { $0.package.packageID == package }) else { return }
         action.progressCounter += 1
-        action.status = status
+        if action.package.tags.contains(.roothide) && status.hasSuffix("(iphoneos-arm64e)") {
+            action.status = status.replacingOccurrences(of: "(iphoneos-arm64e)", with: action.package.rootlessV2 ? "(iphoneos-arm64)" : "")
+        } else {
+            action.status = status
+        }
         action.cell?.operation = action
     }
     
@@ -868,5 +875,23 @@ extension DownloadsTableViewController: UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+}
+
+extension DownloadsTableViewController: UITextViewDelegate {
+    override func canPerformAction(
+        _ action: Selector,
+        withSender sender: Any?
+    ) -> Bool
+    {
+        if action == #selector(selectAll(_:)) {
+            return true
+        } else {
+            return false
+        }
+    }
+    
+    override func selectAll(_ sender: Any?) {
+        detailsTextView?.selectAll(sender)
     }
 }

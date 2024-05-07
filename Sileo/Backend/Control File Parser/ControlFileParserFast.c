@@ -12,6 +12,7 @@ typedef enum PackageTags {
     PackageTagsNone = 0,
     PackageTagsCommercial = 1,
     PackageTagsSileo = 2,
+    PackageTagsRootHide = 4,
 } PackageTags;
 
 static const char *regularMultilineKeys[] = {"description"};
@@ -81,6 +82,9 @@ void controlFileSetSwiftValue(char *key, char *value, void (^callback)(const cha
         }
         if (tagExists(rawTags, "role::sileo", rawTagLen, true) || tagExists(rawTags, "role::cydia", rawTagLen, true)) {
             tagsEnum |= PackageTagsSileo;
+        }
+        if (tagExists(rawTags, "supports::roothide", rawTagLen, true)) {
+            tagsEnum |= PackageTagsRootHide;
         }
         
         tagCallback(tagsEnum);

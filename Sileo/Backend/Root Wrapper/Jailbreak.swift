@@ -48,7 +48,8 @@ enum Jailbreak: String, Codable {
     
     // Fugu15
     case fugu15 = "Fugu15 (iOS 15)"
-    case dopamine = "Dopamine-roothide (iOS 15)"
+    case dopamine15 = "Dopamine-roothide (iOS 15)"
+    case dopamine16 = "Dopamine-roothide (iOS 16)"
     
     // Bakera1n
     case bakera1n_rootless15 = "bakera1n Rootless (iOS 15)"
@@ -74,7 +75,7 @@ enum Jailbreak: String, Codable {
         return String(cString: archRaw)
     }
     
-    static private let supported: Set<Jailbreak> = [.chimera, .odyssey, .taurine, .odysseyra1n12, .odysseyra1n13, .odysseyra1n14, .palera1n_rootful15, .palera1n_rootful16, .palera1n_rootless15, .palera1n_rootless16, .palera1n17, .fugu15, .dopamine]
+    static private let supported: Set<Jailbreak> = [.chimera, .odyssey, .taurine, .odysseyra1n12, .odysseyra1n13, .odysseyra1n14, .palera1n_rootful15, .palera1n_rootful16, .palera1n_rootless15, .palera1n_rootless16, .palera1n17, .fugu15, .dopamine15, .dopamine16]
     public var supportsUserspaceReboot: Bool {
         Self.supported.contains(self)
     }
@@ -93,8 +94,13 @@ enum Jailbreak: String, Codable {
         
         let dopamine = URL(fileURLWithPath: jbroot("/.installed_dopamine"))
         if dopamine.exists {
-            self = .dopamine
-            return
+            if #available(iOS 16.0, *) {
+               self = .dopamine16
+               return
+            } else if #available(iOS 15.0, *) {
+                self = .dopamine15
+                return
+            }
         } else if #available(iOS 17.0.1, *) {
             self = .other
             return

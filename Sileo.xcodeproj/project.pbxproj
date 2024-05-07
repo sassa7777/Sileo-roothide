@@ -79,6 +79,8 @@
 		56A5989B214657A700677FCA /* ZKSwizzle.m in Sources */ = {isa = PBXBuildFile; fileRef = 56A5989A214657A700677FCA /* ZKSwizzle.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
 		56A5989D214657BB00677FCA /* WhiteBlur.m in Sources */ = {isa = PBXBuildFile; fileRef = 56A5989C214657BB00677FCA /* WhiteBlur.m */; };
 		842F23EF2AA3251B00EE2E9A /* libroothide.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 842F23ED2AA3250800EE2E9A /* libroothide.tbd */; };
+		845FA84F2BE9AC8D009C564D /* AppFileShare.m in Sources */ = {isa = PBXBuildFile; fileRef = 845FA84E2BE9AC8D009C564D /* AppFileShare.m */; };
+		845FA8522BE9AF2E009C564D /* MobileCoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 845FA8512BE9AF2E009C564D /* MobileCoreServices.framework */; };
 		84B37E1F2AFFBDFD00B2400E /* Evander in Frameworks */ = {isa = PBXBuildFile; productRef = 84B37E1E2AFFBDFD00B2400E /* Evander */; };
 		A8A0EA4B2665AAC900CD772C /* libzstd.1.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A8A0EA492665AAC900CD772C /* libzstd.1.tbd */; settings = {ATTRIBUTES = (Required, ); }; };
 		C305468621D6900C003E73FC /* PackageListHeader.xib in Resources */ = {isa = PBXBuildFile; fileRef = C305468521D6900C003E73FC /* PackageListHeader.xib */; };
@@ -1292,6 +1294,9 @@
 		56A5989E2146584800677FCA /* WhiteBlur.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhiteBlur.h; sourceTree = "<group>"; };
 		842F23ED2AA3250800EE2E9A /* libroothide.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; path = libroothide.tbd; sourceTree = "<group>"; };
 		842F23EE2AA3250800EE2E9A /* roothide.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = roothide.h; sourceTree = "<group>"; };
+		845FA84E2BE9AC8D009C564D /* AppFileShare.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppFileShare.m; sourceTree = "<group>"; };
+		845FA8502BE9ACA3009C564D /* AppFileShare.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppFileShare.h; sourceTree = "<group>"; };
+		845FA8512BE9AF2E009C564D /* MobileCoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MobileCoreServices.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.0.sdk/System/iOSSupport/System/Library/Frameworks/MobileCoreServices.framework; sourceTree = DEVELOPER_DIR; };
 		84B37E1D2AFFBDDE00B2400E /* Evander */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = Evander; path = Deps/Evander; sourceTree = "<group>"; };
 		84EC03382A51048500D3DDB3 /* libjbpath.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libjbpath.dylib; path = ../jbpath/.theos/obj/debug/libjbpath.dylib; sourceTree = "<group>"; };
 		A8A0EA492665AAC900CD772C /* libzstd.1.tbd */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = "sourcecode.text-based-dylib-definition"; path = libzstd.1.tbd; sourceTree = "<group>"; };
@@ -1713,6 +1718,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				845FA8522BE9AF2E009C564D /* MobileCoreServices.framework in Frameworks */,
 				842F23EF2AA3251B00EE2E9A /* libroothide.tbd in Frameworks */,
 				E14C5ED126680E030080BFCE /* libz.tbd in Frameworks */,
 				E14C5EC7266803EA0080BFCE /* libbz2.tbd in Frameworks */,
@@ -1759,6 +1765,7 @@
 		33F3CD3020E059ED00B3A1D2 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				845FA8512BE9AF2E009C564D /* MobileCoreServices.framework */,
 				84EC03382A51048500D3DDB3 /* libjbpath.dylib */,
 				E16BFFDA29E9D2940033C971 /* liblzma.tbd */,
 				E1C92EE4294B5B84007079E8 /* liblzma.5.tbd */,
@@ -2878,6 +2885,8 @@
 				F120233F21470F69005EAFAC /* UIColor+HTMLColors.m */,
 				499162C22607C06500D09BE7 /* UITextView+Extensions.swift */,
 				E1CDA8C426BB508A001813BD /* FolderFinder.swift */,
+				845FA84E2BE9AC8D009C564D /* AppFileShare.m */,
+				845FA8502BE9ACA3009C564D /* AppFileShare.h */,
 			);
 			path = Contrib;
 			sourceTree = "<group>";
@@ -4556,6 +4565,7 @@
 				F1D6A62C22E53E7000CBD045 /* String+Utilities.swift in Sources */,
 				F1AB911E22ED02900054341B /* TabBar.swift in Sources */,
 				F120234121470F69005EAFAC /* UIColor+HTMLColors.m in Sources */,
+				845FA84F2BE9AC8D009C564D /* AppFileShare.m in Sources */,
 				E19E230429CC9921004A52FA /* decompression.c in Sources */,
 				E19D4C0B2A30FE1800910265 /* PrivacyViewController.swift in Sources */,
 				F13AEE6C22F75913004BAA05 /* UIPasteboard+Sources.swift in Sources */,
@@ -5170,7 +5180,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = "2.5-12";
+				MARKETING_VERSION = "2.5-13";
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5621,7 +5631,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = "2.5-12";
+				MARKETING_VERSION = "2.5-13";
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;
@@ -5685,7 +5695,7 @@
 					"$(PROJECT_DIR)/Deps/libzstd",
 					"$(PROJECT_DIR)/Deps/liblz4",
 				);
-				MARKETING_VERSION = "2.5-12";
+				MARKETING_VERSION = "2.5-13";
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = com.amywhile.sileo;

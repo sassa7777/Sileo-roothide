@@ -200,6 +200,9 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                                                    selector: #selector(PackageViewController.dismissImmediately),
                                                    name: PackageQueueButton.actionPerformedNotification,
                                                    object: nil)
+            
+            downloadButton.NoAnimation = true
+            navBarDownloadButton.NoAnimation = true
         }
 
         self.reloadData()

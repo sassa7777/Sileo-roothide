@@ -233,7 +233,7 @@ class CategoryViewController: SileoTableViewController {
             return String(localizationKey: "Installed_Packages")
         }
         if self.isRootHide(indexPath: indexPath) {
-            return String(localizationKey: "RootHide Compatible")
+            return String(localizationKey: "RootHide Packages")
         }
         return categories?[indexPath.row  - buffer] ?? ""
     }

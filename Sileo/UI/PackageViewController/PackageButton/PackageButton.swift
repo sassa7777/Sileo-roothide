@@ -10,6 +10,9 @@ import Foundation
 import Evander
 
 class PackageButton: UIButton {
+    
+    public var NoAnimation:Bool = false
+    
     required init?(coder: NSCoder) {
         super.init(coder: coder)
         self.setup()
@@ -98,7 +101,7 @@ class PackageButton: UIButton {
     }
     
     override func setTitle(_ title: String?, for state: UIControl.State) {
-        if title == self.title(for: state) || self.window == nil {
+        if title == self.title(for: state) || self.window == nil || self.NoAnimation {
             return super.setTitle(title, for: state)
         } else {
             FRUIView.animateKeyframes(withDuration: 0.25, delay: 0, options: .calculationModeCubicPaced, animations: {
