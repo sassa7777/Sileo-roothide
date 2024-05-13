@@ -80,7 +80,9 @@ final class ICloudPFPHandler {
                 .appendingPathComponent("com.apple.Preferences")
                 .appendingPathComponent(filename)
                 .appendingPathExtension("png")
-            spawn(command: CommandPath.cp, args: [CommandPath.cp, "-f", rootfs("\(iconPath.path)"), rootfs("\(toPath.path)")])
+            if FileManager.default.fileExists(atPath: iconPath.path) {
+                spawn(command: CommandPath.cp, args: [CommandPath.cp, "-f", rootfs("\(iconPath.path)"), rootfs("\(toPath.path)")])
+            }
             if let image = image() {
                 if cached != image {
                     completion(image)
@@ -92,7 +94,9 @@ final class ICloudPFPHandler {
         let iconPath = URL(fileURLWithPath: "/var/mobile/Library/Caches/com.apple.Preferences/")
             .appendingPathComponent(filename)
             .appendingPathExtension("png")
-        spawn(command: CommandPath.cp, args: [CommandPath.cp, "-f", rootfs("\(iconPath.path)"), rootfs("\(toPath.path)")])
+        if FileManager.default.fileExists(atPath: iconPath.path) {
+            spawn(command: CommandPath.cp, args: [CommandPath.cp, "-f", rootfs("\(iconPath.path)"), rootfs("\(toPath.path)")])
+        }
         if let image = image(),
            cached != image {
             completion(image)

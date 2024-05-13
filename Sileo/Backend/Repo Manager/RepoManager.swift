@@ -417,9 +417,14 @@ final class RepoManager {
 
     private func fixLists() {
         #if !targetEnvironment(simulator) && !TARGET_SANDBOX
-        spawnAsRoot(args: [CommandPath.mkdir, "-p", rootfs(CommandPath.lists)])
-        spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", rootfs(CommandPath.lists)])
-        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", rootfs(CommandPath.lists)])
+        var directory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: CommandPath.lists, isDirectory: &directory)
+        if !exists || !directory.boolValue {
+            NSLog("SileoLog: fixLists \(exists) \(directory) \(directory.boolValue)")
+            spawnAsRoot(args: [CommandPath.mkdir, "-p", rootfs(CommandPath.lists)])
+            spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", rootfs(CommandPath.lists)])
+            spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", rootfs(CommandPath.lists)])
+        }
         #endif
     }
 
@@ -451,7 +456,7 @@ final class RepoManager {
             progress?(task, responseProgress)
         }
         task.errorCallback = { task, status, error, url in
-            NSLog("SileoLog: errorCallback=\(status) url=\(url) error=\(error) request=\(request)")
+            NSLog("SileoLog: errorCallback=\(status) request=\(request) url=\(url) error=\(error)")
 //            Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
 
             if let url = url {
@@ -472,13 +477,14 @@ final class RepoManager {
     func fetch(
         from url: URL,
         withExtensionsUntilSuccess extensions: [String],
+        taskupdate: ((EvanderDownloader) -> Void)?,
         progress: ((EvanderDownloader, DownloadProgress) -> Void)?,
         success: @escaping (EvanderDownloader, URL, URL) -> Void,
         failure: @escaping (EvanderDownloader?, Int, Error?) -> Void
-    ) -> EvanderDownloader? {
+    ) {
         guard !extensions.isEmpty else {
             failure(nil, 404, nil)
-            return nil
+            return
         }
         let fullURL: URL
         if extensions[0] == "" {
@@ -495,28 +501,35 @@ final class RepoManager {
             failure: { task, status, error in
                 let newExtensions = Array(extensions.dropFirst())
                 guard !newExtensions.isEmpty else { return failure(task, status, error) }
-                self.fetch(from: url, withExtensionsUntilSuccess: newExtensions, progress: progress, success: success, failure: failure)
+                self.fetch(from: url, withExtensionsUntilSuccess: newExtensions, taskupdate: taskupdate, progress: progress, success: success, failure: failure)
             }
         )
-        session?.resume()
-        return session
+        
+        if let session=session {
+            taskupdate?(session)
+            session.resume()
+        } else {
+            failure(nil, 520, nil)
+        }
     }
 
     private func repoRequiresUpdate(_ repo: Repo) -> Bool {
-        PackageListManager.shared.initWait()
-        if !repo.packagesExist {
-            return true
-        }
-        let packagesFile = cacheFile(named: "Packages", for: repo)
-        if !packagesFile.exists {
-            return true
-        }
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: packagesFile.path),
-              let modifiedDate = attributes[.modificationDate] as? Date
-        else {
-            return true
-        }
-        return Date().timeIntervalSince(modifiedDate) > 3 * 3600
+        return true
+        //this may not work since the Packages file will not be updated if its hash has not changed
+//        PackageListManager.shared.initWait()
+//        if !repo.packagesExist {
+//            return true
+//        }
+//        let packagesFile = cacheFile(named: "Packages", for: repo)
+//        if !packagesFile.exists {
+//            return true
+//        }
+//        guard let attributes = try? FileManager.default.attributesOfItem(atPath: packagesFile.path),
+//              let modifiedDate = attributes[.modificationDate] as? Date
+//        else {
+//            return true
+//        }
+//        return Date().timeIntervalSince(modifiedDate) > 3 * 3600
     }
 
     public func postProgressNotification(_ repo: Repo?) {
@@ -557,11 +570,7 @@ final class RepoManager {
         repos: [Repo],
         completion: @escaping (Bool, NSAttributedString) -> Void
     ) {
-        var directory: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: CommandPath.lists, isDirectory: &directory)
-        if !exists ||  !directory.boolValue {
-            fixLists()
-        }
+        fixLists()
         
         let loglock = NSLock()
         let errorOutput = NSMutableAttributedString()
@@ -591,7 +600,7 @@ final class RepoManager {
         let lock = NSLock()
 
         for threadID in 0..<(ProcessInfo.processInfo.processorCount * 2) {
-            updateGroup.enter()
+            updateGroup.enter() //enter group before async block
             let repoQueue = DispatchQueue(label: "repo-queue-\(threadID)")
             repoQueue.async {
                 while true {
@@ -604,16 +613,20 @@ final class RepoManager {
                     lock.unlock()
 
                     repo.startedRefresh = true
+                    self.postProgressNotification(repo)
 
                     if !force && !self.repoRequiresUpdate(repo) && !repo.packageDict.isEmpty {
                         if !repo.isLoaded {
                             repo.isLoaded = true
                             self.postProgressNotification(repo)
                         }
+                        NSLog("SileoLog: skipUpdate repo=\(repo) \(self.repoRequiresUpdate(repo)) \(repo.packageDict.isEmpty)")
                         continue
                     }
 
-                    let semaphore = DispatchSemaphore(value: 0)
+                    let ReleaseFileSemaphore = DispatchSemaphore(value: 0)
+                    let PackagesFileSemaphore = DispatchSemaphore(value: 0)
+                    let ReleaseGPGFileSemaphore = DispatchSemaphore(value: 0)
 
                     var preferredArch: String?
                     var optReleaseFile: (url: URL, dict: [String: String])?
@@ -630,7 +643,7 @@ final class RepoManager {
                         },
                         success: { task, fileURL in
                             defer {
-                                semaphore.signal()
+                                ReleaseFileSemaphore.signal()
                             }
 
                             guard let releaseContents = fileURL.aptContents else {
@@ -685,91 +698,21 @@ final class RepoManager {
                         },
                         failure: { task, status, error in
                             defer {
-                                semaphore.signal()
+                                ReleaseFileSemaphore.signal()
                             }
 
                             log("\(releaseURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
                             errorsFound = true
-                            repo.releaseProgress = 1
+//                            repo.releaseProgress = 1
                             self.postProgressNotification(repo)
                         }
                     )
                     releaseTask?.resume()
-
-                    let startTime = Date()
-                    let refreshTimeout: TimeInterval = isBackground ? 10 : 20
-                    if !repo.isFlat { // we have to wait for preferredArch to be determined
-                        let refreshInterval: DispatchTime = .now() + refreshTimeout
-                        if semaphore.wait(timeout: refreshInterval) != .success {
-                            releaseTask?.cancel()
-                        }
-                    }
                     
-                    //save repo config for dists repo
-                    repo.preferredArch = preferredArch
-
-                    let packages: URL?
-                    if repo.isFlat || preferredArch != nil {
-                        packages = repo.packagesURL(arch: preferredArch)
-                    } else {
-                        packages = nil
-                    }
-
-                    var succeededExtension = ""
-                    #if !targetEnvironment(simulator) && !TARGET_SANDBOX
-                    let extensions = ["zst", "xz", "lzma", "bz2", "gz", ""]
-                    #else
-                    let extensions = ["xz", "lzma", "bz2", "gz", ""]
-                    #endif
-                    var breakOff = false
-                    packages.map { url in let task=self.fetch(
-                        from: url,
-                        withExtensionsUntilSuccess: extensions,
-                        progress: { task, progress in
-                            if !breakOff {
-                                repo.packagesProgress = CGFloat(progress.fractionCompleted)
-                                self.postProgressNotification(repo)
-                            } else {
-                                task.cancel()
-                            }
-                        },
-                        success: { task, succeededURL, fileURL in
-                            defer {
-                                if !breakOff {
-                                    semaphore.signal()
-                                }
-                            }
-
-                            if !breakOff {
-                                succeededExtension = succeededURL.pathExtension
-
-                                // to calculate the package file name, subtract the base URL from it. Ensure there's no leading /
-                                let repoURL = repo.repoURL
-                                let substringOffset = repoURL.hasSuffix("/") ? 0 : 1
-
-                                let fileName = succeededURL.absoluteString.dropFirst(repoURL.count + substringOffset)
-                                optPackagesFile = (fileURL, String(fileName))
-
-                                repo.packagesProgress = 1
-                                self.postProgressNotification(repo)
-                            } else {
-                                repo.packagesProgress = 0
-                                repo.releaseProgress = 0
-                                repo.releaseGPGProgress = 0
-                                self.postProgressNotification(repo)
-                            }
-                        },
-                        failure: { task, status, error in
-                            defer {
-                                semaphore.signal()
-                            }
-                            log("\(url) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
-                            errorsFound = true
-                            repo.packagesProgress = 1
-                            self.postProgressNotification(repo)
-                        }
-                    )
-                    }
+                    var startTime = Date()
+                    let refreshTimeout: TimeInterval = isBackground ? 10 : 20
+                    
+                    let NO_PGP = true
                     let releaseGPGFileDst = self.cacheFile(named: "Release.gpg", for: repo)
                     let releaseGPGURL = URL(string: repo.repoURL)!.appendingPathComponent("Release.gpg")
                     let releaseGPGTask = self.queue(
@@ -780,7 +723,7 @@ final class RepoManager {
                         },
                         success: { task, fileURL in
                             defer {
-                                semaphore.signal()
+                                ReleaseGPGFileSemaphore.signal()
                             }
                             releaseGPGFileURL = fileURL
                             repo.releaseGPGProgress = 1
@@ -788,54 +731,78 @@ final class RepoManager {
                         },
                         failure: { task, status, error in
                             defer {
-                                semaphore.signal()
+                                ReleaseGPGFileSemaphore.signal()
                             }
 
                             if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
                                 log("\(releaseGPGURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
                                 errorsFound = true
                             }
-                            repo.releaseGPGProgress = 1
+//                            repo.releaseGPGProgress = 1
                             self.postProgressNotification(repo)
                         }
                     )
-                    releaseGPGTask?.resume()
-
-                    // if the repo is flat, then we didn't wait for Release earlier so wait now
-                    let numReleaseWaits = repo.isFlat ? 2 : 1
-                    var isReleaseGPGValid = false
-
+                    if !NO_PGP {
+                        releaseGPGTask?.resume()
+                    } else {
+                        repo.releaseGPGProgress = 1
+                        self.postProgressNotification(repo)
+                    }
+                    
+                    //stage 2
+                    
+                    if ReleaseFileSemaphore.wait(timeout: .now() + refreshTimeout - Date().timeIntervalSince(startTime)) != .success {
+                        releaseTask?.cancel()
+                    }
+                    guard let releaseFile = optReleaseFile else {
+                        NSLog("SileoLog: optReleaseFile=\(optReleaseFile)")
+                        log("Could not find release file for \(repo.repoURL)", type: .error)
+                        errorsFound = true
+//                        reposUpdated += 1
+                        self.checkUpdatesInBackground()
+                        continue
+                    }
+                    
+                    //save repo config for dists repo
+                    repo.preferredArch = preferredArch
+                    
+                    var breakOff = false
                     func escapeEarly() {
-                        #if targetEnvironment(macCatalyst)
-                        guard isReleaseGPGValid else { return }
-                        #endif
+                        NSLog("SileoLog: breakOff=\(breakOff)")
+//                        #if targetEnvironment(macCatalyst)
+//                        guard isReleaseGPGValid else { return }
+//                        #endif
                         guard !breakOff,
                               !repo.packageDict.isEmpty,
                               repo.packagesExist,
                               optPackagesFile == nil,
-                              let releaseFile = optReleaseFile else { return }
+                              let releaseFile = optReleaseFile else { NSLog("SileoLog: escapeEarly abort \(breakOff),\(repo.packageDict.isEmpty),\(repo.packagesExist),\(optPackagesFile)"); return }
                         let supportedHashTypes = RepoHashType.allCases.compactMap { type in releaseFile.dict[type.rawValue].map { (type, $0) } }
-                        guard !supportedHashTypes.isEmpty else { return }
+                        NSLog("SileoLog: supportedHashTypes=\(supportedHashTypes)")
+                        guard !supportedHashTypes.isEmpty else { NSLog("SileoLog: empty supported hash"); return }
                         let hashes: (RepoManager.RepoHashType, String)
-                        if let tmp = supportedHashTypes.first(where: { $0.0 == RepoHashType.sha256 }) {
+                        if let tmp = supportedHashTypes.first(where: { $0.0 == RepoHashType.sha512 }) { //Consistent with hashToSave, prefers sha512
                             hashes = tmp
-                        } else if let tmp = supportedHashTypes.first(where: { $0.0 == RepoHashType.sha512 }) {
+                        } else if let tmp = supportedHashTypes.first(where: { $0.0 == RepoHashType.sha256 }) {
                             hashes = tmp
-                        } else { return }
+                        } else { NSLog("SileoLog: no supported hash"); return }
+                        NSLog("SileoLog: using \(hashes.0.rawValue) hashtype")
                         let jsonPath = EvanderNetworking._cacheDirectory.appendingPathComponent("RepoHashCache").appendingPathExtension("json")
                         guard let url = URL(string: repo.repoURL),
                               let cachedData = try? Data(contentsOf: jsonPath),
                               let cacheTmp = (try? JSONSerialization.jsonObject(with: cachedData, options: .mutableContainers)) as? [String: [String: String]],
-                              let cacheDict = cacheTmp[hashes.0.rawValue] else { return }
+                              let cacheDict = cacheTmp[hashes.0.rawValue] else { NSLog("SileoLog: invalid hash cache"); return }
                         var hashDict = [String: String]()
-                        let extensions = ["zst", "xz", "bz2", "gz", ""]
+//                        let extensions = ["zst", "xz", "bz2", "gz", ""] //no lzma???
+                        let extensions = ["zst", "xz", "lzma", "bz2", "gz", ""]
                         for ext in extensions {
-                            if let hash = cacheDict[url.appendingPathComponent("Packages").appendingPathExtension(ext).absoluteString] {
+                            let key = url.appendingPathComponent("Packages").appendingPathExtension(ext).absoluteString
+                            NSLog("SileoLog: cacheDict[\(key)] : \(cacheDict[key])")
+                            if let hash = cacheDict[key] {
                                 hashDict[ext] = hash
                             }
                         }
-                        if hashDict.isEmpty { return }
-
+                        if hashDict.isEmpty { NSLog("SileoLog: hashDict is empty"); return }
                         let repoHashStrings = hashes.1
                         let files = repoHashStrings.components(separatedBy: "\n")
                         for file in files {
@@ -859,73 +826,138 @@ final class RepoManager {
                             if key == seperated[0] {
                                 breakOff = true
                                 repo.packagesProgress = 1
-                                semaphore.signal()
+                                self.postProgressNotification(repo)
+                                NSLog("SileoLog: breakOff=true, Packages hash not changed")
                                 return
                             }
                         }
                     }
+                    escapeEarly() //may set breakOff=true
 
-                    escapeEarly()
-
-                    if !breakOff {
-                        if packages != nil {
-                            let timeout = refreshTimeout - Date().timeIntervalSince(startTime)
-                            _ = semaphore.wait(timeout: .now() + timeout) // Packages
-                        }
-                    }
-                    for _ in 0..<numReleaseWaits {
-                        let timeout = refreshTimeout - Date().timeIntervalSince(startTime)
-                        _ = semaphore.wait(timeout: .now() + timeout)
-                    }
-                    releaseTask?.cancel()
-                    releaseGPGTask?.cancel()
-                    guard let releaseFile = optReleaseFile else {
-                        NSLog("SileoLog: optReleaseFile=\(optReleaseFile)")
-                        log("Could not find release file for \(repo.repoURL)", type: .error)
+                    if repo.isFlat==false && preferredArch==nil {
+                        log("Could not find preferredArch for \(repo.repoURL)", type: .error)
                         errorsFound = true
-                        reposUpdated += 1
+//                        reposUpdated += 1
                         self.checkUpdatesInBackground()
                         continue
                     }
-
-                    if let releaseGPGFileURL = releaseGPGFileURL {
-                        var error: String = ""
-                        let validAndTrusted = APTWrapper.verifySignature(key: releaseGPGFileURL.aptPath, data: releaseFile.url.aptPath, error: &error)
-                        if !validAndTrusted || !error.isEmpty {
-                            if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
-                                log("Invalid GPG signature at \(releaseGPGURL)", type: .error)
-                                errorsFound = true
-                                #if targetEnvironment(macCatalyst)
-                                repo.packageDict = [:]
-                                reposUpdated += 1
-                                self.checkUpdatesInBackground()
-                                continue
-                                #endif
-                            }
-                        } else {
-                            isReleaseGPGValid = true
-                        }
-                    }
-
-                    #if targetEnvironment(macCatalyst)
-                    if !isReleaseGPGValid {
-                        repo.packageDict = [:]
-                        errorsFound = true
-                        log("\(repo.repoURL) had no valid GPG signature", type: .error)
-                        reposUpdated += 1
-                        self.checkUpdatesInBackground()
-                        continue
-                    }
+                    
+                    let packagesUrl = repo.packagesURL(arch: preferredArch)
+                    var succeededExtension = ""
+                    #if !targetEnvironment(simulator) && !TARGET_SANDBOX
+                    let extensions = ["zst", "xz", "lzma", "bz2", "gz", ""]
+                    #else
+                    let extensions = ["xz", "lzma", "bz2", "gz", ""]
                     #endif
-
-                    NSLog("SileoLog: packagesFileDst=\(repo.url),\(repo.isFlat),\(repo.preferredArch),\(repo.packagesExist),\(breakOff),\(optPackagesFile)")
+                    
+                    //request Packages File
+                    var packagesTask: EvanderDownloader? = nil;
+                    if !breakOff {
+                        self.fetch(
+                            from: packagesUrl!,
+                            withExtensionsUntilSuccess: extensions,
+                            taskupdate: { task in
+                                packagesTask = task
+                            },
+                            progress: { task, progress in
+                                if !breakOff {
+                                    repo.packagesProgress = CGFloat(progress.fractionCompleted)
+                                    self.postProgressNotification(repo)
+                                } else {
+                                    task.cancel()
+                                }
+                            },
+                            success: { task, succeededURL, fileURL in
+                                defer {
+                                    if !breakOff {
+                                        PackagesFileSemaphore.signal()
+                                    }
+                                }
+                                
+                                if !breakOff {
+                                    succeededExtension = succeededURL.pathExtension
+                                    
+                                    // to calculate the package file name, subtract the base URL from it. Ensure there's no leading /
+                                    let repoURL = repo.repoURL
+                                    let substringOffset = repoURL.hasSuffix("/") ? 0 : 1
+                                    
+                                    let fileName = succeededURL.absoluteString.dropFirst(repoURL.count + substringOffset)
+                                    optPackagesFile = (fileURL, String(fileName))
+                                    
+                                    repo.packagesProgress = 1
+                                    self.postProgressNotification(repo)
+                                } else {
+                                    repo.packagesProgress = 0
+                                    repo.releaseProgress = 0
+                                    repo.releaseGPGProgress = 0
+                                    self.postProgressNotification(repo)
+                                }
+                            },
+                            failure: { task, status, error in
+                                defer {
+                                    PackagesFileSemaphore.signal()
+                                }
+                                log("\(packagesUrl) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
+                                errorsFound = true
+//                                repo.packagesProgress = 1
+                                self.postProgressNotification(repo)
+                            }
+                        )
+                    }
+                    
+                    //verify GPG
+                    var isReleaseGPGValid = false
+                    if !NO_PGP {
+                        if ReleaseGPGFileSemaphore.wait(timeout: .now() + refreshTimeout - Date().timeIntervalSince(startTime))  != .success {
+                            releaseGPGTask?.cancel()
+                        }
+                        if let releaseGPGFileURL = releaseGPGFileURL {
+                            var error: String = ""
+                            let validAndTrusted = APTWrapper.verifySignature(key: releaseGPGFileURL.aptPath, data: releaseFile.url.aptPath, error: &error)
+                            NSLog("SileoLog: validAndTrusted=\(validAndTrusted) for \(repo.url)")
+                            if !validAndTrusted || !error.isEmpty {
+                                if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
+                                    log("Invalid GPG signature at \(releaseGPGURL)", type: .error)
+                                    errorsFound = true
+                                    #if targetEnvironment(macCatalyst)
+                                    repo.packageDict = [:]
+//                                    reposUpdated += 1
+                                    self.checkUpdatesInBackground()
+                                    continue
+                                    #endif
+                                }
+                            } else {
+                                isReleaseGPGValid = true
+                            }
+                        }
+                        
+                        #if targetEnvironment(macCatalyst)
+                        if !isReleaseGPGValid {
+                            repo.packageDict = [:]
+                            errorsFound = true
+                            log("\(repo.repoURL) had no valid GPG signature", type: .error)
+//                            reposUpdated += 1
+                            self.checkUpdatesInBackground()
+                            continue
+                        }
+                        #endif
+                    }
+                    
+                    //wait for Packages File
+                    if !breakOff {
+                        if PackagesFileSemaphore.wait(timeout: .now() + refreshTimeout) != .success {
+                            packagesTask?.cancel()
+                        }
+                    }
+                    
+                    NSLog("SileoLog: optPackagesFile=\(optPackagesFile)  \(repo.url),\(repo.isFlat),\(repo.preferredArch),\(repo.packagesExist),\(breakOff)")
                     let packagesFileDst = self.cacheFile(named: "Packages", for: repo)
                     var skipPackages = false
                     if !breakOff {
                         guard var packagesFile = optPackagesFile else {
                             log("Could not find packages file for \(repo.repoURL)", type: .error)
                             errorsFound = true
-                            reposUpdated += 1
+//                            reposUpdated += 1
                             self.checkUpdatesInBackground()
                             continue
                         }
@@ -1038,29 +1070,41 @@ final class RepoManager {
                         let attributes = [FileAttributeKey.modificationDate: Date()]
                         try? FileManager.default.setAttributes(attributes, ofItemAtPath: packagesFileDst.path)
                     }
-                    if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) && !isReleaseGPGValid {
-                        reposUpdated += 1
-                        self.checkUpdatesInBackground()
-                        continue
-                    }
 
-                    let releaseFileDst = self.cacheFile(named: "Release", for: repo)
-                    moveFileAsRoot(from: releaseFile.url, to: releaseFileDst)
-
-                    if let releaseGPGFileURL = releaseGPGFileURL {
-                        if isReleaseGPGValid {
-                            moveFileAsRoot(from: releaseGPGFileURL, to: releaseGPGFileDst)
-                        } else {
+                    if !NO_PGP {
+                        if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) && !isReleaseGPGValid {
+//                            reposUpdated += 1
+                            self.checkUpdatesInBackground()
+                            continue
+                        }
+                        if let releaseGPGFileURL = releaseGPGFileURL {
+                            if isReleaseGPGValid {
+                                moveFileAsRoot(from: releaseGPGFileURL, to: releaseGPGFileDst)
+                            } else {
+                                deleteFileAsRoot(releaseGPGFileDst)
+                            }
+                        }
+                        releaseGPGFileURL.map { try? FileManager.default.removeItem(at: $0) }
+                    } else {
+                        if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
                             deleteFileAsRoot(releaseGPGFileDst)
                         }
                     }
-
+                    
+                    let releaseFileDst = self.cacheFile(named: "Release", for: repo)
+                    moveFileAsRoot(from: releaseFile.url, to: releaseFileDst)
                     try? FileManager.default.removeItem(at: releaseFile.url.aptUrl)
-                    releaseGPGFileURL.map { try? FileManager.default.removeItem(at: $0) }
-
+                    
                     self.checkUpdatesInBackground()
-                }
-
+                    
+                    //dismiss progress bar
+                    repo.releaseProgress = 0
+                    repo.packagesProgress = 0
+                    repo.releaseGPGProgress = 0
+                    repo.startedRefresh = false
+                    self.postProgressNotification(repo)
+                    
+                } //while true
                 updateGroup.leave()
             }
         }

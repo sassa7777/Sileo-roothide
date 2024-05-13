@@ -25,14 +25,14 @@ func dynamicColor(default defaultColor: UIColor, dark: UIColor) -> UIColor {
 class SileoThemeManager: NSObject {
     @objc static var shared = SileoThemeManager()
     static let sileoChangedThemeNotification = Notification.Name("sileoChangedThemeNotification")
+    static let sileoReloadThemeNotification = Notification.Name("sileoReloadThemeNotification")
     
     var tintColor: UIColor
-    
-    @objc var currentTheme: SileoTheme
     var themeList = [SileoTheme]()
+    @objc var currentTheme: SileoTheme
     
     override init() {
-        let lightTheme = SileoTheme(name: String(localizationKey: "Sileo_Light"), interfaceStyle: .light)
+        let lightTheme = SileoTheme(name: "Sileo_Light", interfaceStyle: .light)
         lightTheme.backgroundColor = .white
         lightTheme.secondaryBackgroundColor = UIColor(white: 245/255, alpha: 1)
         lightTheme.labelColor = .black
@@ -42,7 +42,7 @@ class SileoThemeManager: NSObject {
         lightTheme.bannerColor = UIColor(red: 0.941, green: 0.996, blue: 1, alpha: 1)
         themeList.append(lightTheme)
 
-        let darkTheme = SileoTheme(name: String(localizationKey: "Sileo_Dark"), interfaceStyle: .dark)
+        let darkTheme = SileoTheme(name: "Sileo_Dark", interfaceStyle: .dark)
         darkTheme.backgroundColor = UIColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1)
         darkTheme.secondaryBackgroundColor = UIColor(white: 60/255, alpha: 1)
         darkTheme.labelColor = .white
@@ -53,7 +53,7 @@ class SileoThemeManager: NSObject {
         themeList.append(darkTheme)
         
         if #available(iOS 13.0, *) {
-            let adaptiveTheme = SileoTheme(name: String(localizationKey: "Sileo_Adaptive"), interfaceStyle: .system)
+            let adaptiveTheme = SileoTheme(name: "Sileo_Adaptive", interfaceStyle: .system)
             adaptiveTheme.backgroundColor = dynamicColor(default: .white,
                                                          dark: UIColor(red: 28/255, green: 28/255, blue: 30/255, alpha: 1))
             adaptiveTheme.secondaryBackgroundColor = dynamicColor(default: UIColor(white: 245/255, alpha: 1),
@@ -68,7 +68,7 @@ class SileoThemeManager: NSObject {
                                                      dark: UIColor(red: 0.059, green: 0.004, blue: 0, alpha: 1))
             themeList.append(adaptiveTheme)
             
-            let systemTheme = SileoTheme(name: String(localizationKey: "System"), interfaceStyle: .system)
+            let systemTheme = SileoTheme(name: "System", interfaceStyle: .system)
             systemTheme.backgroundColor = .systemBackground
             systemTheme.secondaryBackgroundColor = .secondarySystemBackground
             systemTheme.labelColor = .label
@@ -92,13 +92,27 @@ class SileoThemeManager: NSObject {
         }
         
         if let userSavedThemesData = UserDefaults.standard.data(forKey: "userSavedThemes"), let userSavedThemes = try? ZippyJSONDecoder().decode([SileoCodableTheme].self, from: userSavedThemesData) {
-            themeList.append(contentsOf: Array(Set(userSavedThemes.map { $0.sileoTheme })))
+            for userTheme in userSavedThemes {
+                if !themeList.map({ $0.name }).contains(userTheme.sileoTheme.name) {
+                    themeList.append(userTheme.sileoTheme)
+                }
+            }
         }
-        
-        themeList = Array(Set(themeList)) // duplicate removal
         
         let strings = themeList.map({ $0.name })
         currentTheme = themeList[strings.firstIndex(of: UserDefaults.standard.value(forKey: "currentTheme") as? String ?? defaultTheme) ?? 0]
+        
+//        NSLog("SileoLog: currentTheme=\(currentTheme.name) strings=\(strings)")
+//        for i in 0..<themeList.count { NSLog("SileoLog:  themeList: \(i) : \(themeList[i].name)")}
+//        NSLog("SileoLog: currentTheme=\(UserDefaults.standard.value(forKey: "currentTheme"))")
+//        NSLog("SileoLog: currentTheme=\(UserDefaults.standard.value(forKey: "currentTheme") as? String ?? defaultTheme)")
+//        NSLog("SileoLog: currentTheme=\(strings.firstIndex(of: UserDefaults.standard.value(forKey: "currentTheme") as? String ?? defaultTheme) ?? 0)")
+//
+        
+        NotificationCenter.default.addObserver(forName: SileoThemeManager.sileoReloadThemeNotification, object: nil, queue: nil) { _ in
+            NSLog("SileoLog: SileoThemeManager.shared = SileoThemeManager()")
+            SileoThemeManager.shared = SileoThemeManager()
+        }
         
         super.init()
     }

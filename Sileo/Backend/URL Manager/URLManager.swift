@@ -8,6 +8,7 @@
 
 import Foundation
 import SafariServices
+import Evander
 
 class URLManager {
     
@@ -16,7 +17,7 @@ class URLManager {
     }
     
     static func urlRequest(_ url: URL, includingDeviceInfo: Bool = true) -> URLRequest {
-        var request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 5)
+        var request = URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: EvanderDownloader.timeoutInterval)
         
         let cfVersion = String(format: "%.3f", kCFCoreFoundationVersionNumber)
         let bundleName = Bundle.main.infoDictionary?[kCFBundleNameKey as String] ?? ""

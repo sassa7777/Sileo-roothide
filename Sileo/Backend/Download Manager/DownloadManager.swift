@@ -813,7 +813,13 @@ final class DownloadManager {
             let downloadURL = url ?? URL(string: filename)
             NSLog("SileoLog: downloadURL=\(downloadURL)")
             task = RepoManager.shared.queue(from: downloadURL, progress: { task, progress in
-                updateMsg(msg: "\(Int(progress.fractionCompleted * 100))% ...")
+                var msg:String
+                if progress.expected==NSURLSessionTransferSizeUnknown {
+                    msg = "\(progress.total) bytes ..."
+                } else {
+                    msg = "\(Int(progress.fractionCompleted * 100))% ..."
+                }
+                updateMsg(msg: msg)
             }, success: { task, fileURL in
                 
                 let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)

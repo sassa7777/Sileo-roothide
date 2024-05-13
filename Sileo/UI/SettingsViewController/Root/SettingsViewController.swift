@@ -54,6 +54,12 @@ class SettingsViewController: BaseSettingsViewController, ThemeSelected {
                                                object: nil)
     }
     
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        tableView.reloadData()
+        NSLog("SileoLog: SettingsViewController viewWillAppear")
+    }
+    
     override func updateSileoColors() {
         super.updateSileoColors()
         tableView.reloadData()
@@ -136,7 +142,7 @@ extension SettingsViewController { // UITableViewDataSource
                 cell.pickerView.selectRow(cell.values.firstIndex(of: SileoThemeManager.shared.currentTheme.name) ?? 0, inComponent: 0, animated: false)
                 cell.callback = self
                 cell.title.text = String(localizationKey: "Theme")
-                cell.subtitle.text = cell.values[cell.pickerView.selectedRow(inComponent: 0)]
+                cell.subtitle.text = String(localizationKey: cell.values[cell.pickerView.selectedRow(inComponent: 0)])
                 cell.backgroundColor = .clear
                 cell.title.textColor = .tintColor
                 cell.subtitle.textColor = .tintColor

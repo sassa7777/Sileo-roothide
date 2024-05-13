@@ -109,6 +109,8 @@ open class BaseSubtitleTableViewCell: UITableViewCell {
     
     public var progress: CGFloat = 0 {
         didSet {
+            NSLog("SileoLog: progress=\(self.progress) \((self as? SourcesTableViewCell)?.repo?.url) \(self)")
+//            Thread.callStackSymbols.forEach{NSLog("SileoLog: callstack=\($0)")}
             FRUIView.animate(withDuration: 0.1) { [weak self] in
                 guard let strong = self else { return }
                 strong.progressView.progress = strong.progress

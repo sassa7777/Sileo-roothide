@@ -36,7 +36,7 @@ class BaseSettingsViewController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: String(localizationKey: "Done_Editing"),
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: String(localizationKey: "Close"),
                                                                  style: .done,
                                                                  target: self,
                                                                  action: #selector(dismissController))

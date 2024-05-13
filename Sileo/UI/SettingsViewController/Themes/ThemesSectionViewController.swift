@@ -89,6 +89,7 @@ class ThemesSectionViewController: BaseSettingsViewController {
         } set {
             let encoded = (try? JSONEncoder().encode(newValue.map(\.codable))) ?? Data()
             UserDefaults.standard.set(encoded, forKey: "userSavedThemes")
+            NotificationCenter.default.post(name: SileoThemeManager.sileoReloadThemeNotification, object: nil)
         }
     }
     
@@ -105,7 +106,7 @@ class ThemesSectionViewController: BaseSettingsViewController {
     }
     
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        return "Themes"
+        return ""
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {

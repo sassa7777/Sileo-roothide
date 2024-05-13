@@ -369,9 +369,9 @@ final class PackageListManager {
                 return true
             }
         }
-        for p in packageList {
-            NSLog("SileoLog: packageList=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile) author:\(p.author?.string)")
-        }
+//        for p in packageList {
+//            NSLog("SileoLog: packageList=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile) author:\(p.author?.string)")
+//        }
         // Remove Any Duplicates
         var temp = [String: Package]()
         for package in packageList {
@@ -387,9 +387,9 @@ final class PackageListManager {
         if sort {
             packageList = sortPackages(packages: packageList, search: search)
         }
-        for p in packageList {
-            NSLog("SileoLog: packageList2=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
-        }
+//        for p in packageList {
+//            NSLog("SileoLog: packageList2=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile)")
+//        }
         return packageList
     }
     
@@ -635,7 +635,7 @@ func checkRootHide(_ package: Package) -> Bool {
 //        }
 //        return found
     
-    NSLog("SileoLog: checkRootHide=\(package.package)(\(package.architecture)):\(package.sourceRepo), \(package.sourceRepo?.repoName), \(package.sourceRepo?.displayName), \(package.sourceRepo?.rawURL), \(package.sourceRepo?.displayURL), \(package.sourceRepo?.repoURL)")
+    //NSLog("SileoLog: checkRootHide=\(package.package)(\(package.architecture)):\(package.sourceRepo), \(package.sourceRepo?.repoName), \(package.sourceRepo?.displayName), \(package.sourceRepo?.rawURL), \(package.sourceRepo?.displayURL), \(package.sourceRepo?.repoURL)")
     
     let roothideArch = DPKGArchitecture.Architecture.roothide.rawValue
     

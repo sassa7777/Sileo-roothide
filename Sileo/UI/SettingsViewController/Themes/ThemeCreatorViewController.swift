@@ -71,7 +71,7 @@ class ThemeCreatorViewController: BaseSettingsViewController {
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if indexPath.section == 0 {
             let cell = tableView.dequeueReusableCell(withIdentifier: "ThemeCreatorCell") ?? UITableViewCell(style: .default, reuseIdentifier: "ThemeCreatorCell")
-            cell.textLabel?.text = "Theme Name"
+            cell.textLabel?.text = String(localizationKey: "Theme_Name")
             cell.contentView.addSubview(nameTextField)
             
             NSLayoutConstraint.activate([
@@ -84,7 +84,8 @@ class ThemeCreatorViewController: BaseSettingsViewController {
         } else if indexPath.section == 2 {
             let cell = UITableViewCell(style: .default, reuseIdentifier: "ThemeCreatorCell")
             cell.textLabel?.text = String(localizationKey: "Create_Theme")
-            cell.backgroundColor = .clear
+            cell.textLabel?.font = UIFont.systemFont(ofSize: 18, weight: .bold)
+            cell.backgroundColor = .sileoBannerColor
             return cell
         }
         
@@ -154,14 +155,16 @@ class ThemeCreatorViewController: BaseSettingsViewController {
             presentColorController()
             tableView.deselectRow(at: indexPath, animated: true)
         case 2:
+            tableView.deselectRow(at: indexPath, animated: true)
             guard let themeName = themeName else {
                 let controller = UIAlertController(title: "Please set a name.", message: nil, preferredStyle: .alert)
                 controller.addAction(.init(title: "OK", style: .cancel))
+                self.present(controller, animated: true, completion: nil)
                 return
             }
             
             // make sure the name isn't already being used
-            guard !SileoThemeManager.shared.themeList.contains(where: { $0.name == themeName }) else {
+            guard !SileoThemeManager.shared.themeList.contains(where: { $0.name==themeName || String(localizationKey: $0.name) == themeName }) else {
                 let controller = UIAlertController(title: "Cannot use name", message: "The name \"\(themeName)\" is already being used", preferredStyle: .alert)
                 controller.addAction(.init(title: "OK", style: .cancel, handler: nil))
                 self.present(controller, animated: true, completion: nil)
@@ -184,8 +187,9 @@ class ThemeCreatorViewController: BaseSettingsViewController {
             guard let encoded = try? JSONEncoder().encode(themes) else {
                 return
             }
-            
+            NSLog("SileoLog: post sileoManagerThemeNotification")
             UserDefaults.standard.set(encoded, forKey: "userSavedThemes")
+            NotificationCenter.default.post(name: SileoThemeManager.sileoReloadThemeNotification, object: nil)
             sectionVC?.tableView.reloadData()
             self.navigationController?.popViewController(animated: true)
         default: break

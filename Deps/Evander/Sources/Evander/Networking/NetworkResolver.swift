@@ -270,7 +270,7 @@ final public class EvanderNetworking {
     }
     
     class public func request<T: Decodable>(url: URL, type: T.Type, method: String = "GET", headers: [String: String] = [:], json: [String: AnyHashable?]? = nil, multipart: [[String: Data]]? = nil, form: [String: AnyHashable]? = nil, cache: CacheConfig = .init(), _ completion: @escaping DecodableResponse<T>) {
-        var request = URLRequest(url: url, timeoutInterval: 30)
+        var request = URLRequest(url: url, timeoutInterval: EvanderDownloader.timeoutInterval)
         request.httpMethod = method
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
@@ -322,7 +322,7 @@ final public class EvanderNetworking {
     }
     
     class public func request<T: Any>(url: URL, type: T.Type, method: String = "GET", headers: [String: String] = [:], json: [String: AnyHashable?]? = nil, multipart: [[String: Data]]? = nil, form: [String: AnyHashable]? = nil, cache: CacheConfig = .init(), _ completion: @escaping Response<T>) {
-        var request = URLRequest(url: url, timeoutInterval: 30)
+        var request = URLRequest(url: url, timeoutInterval: EvanderDownloader.timeoutInterval)
         request.httpMethod = method
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
@@ -374,7 +374,7 @@ final public class EvanderNetworking {
     }
     
     class public func head(url: URL, _ completion: @escaping ((_ success: Bool) -> Void)) {
-        var request = URLRequest(url: url, timeoutInterval: 5)
+        var request = URLRequest(url: url, timeoutInterval: EvanderDownloader.timeoutInterval)
         request.httpMethod = "HEAD"
         let task = URLSession.shared.dataTask(with: request) { _, response, _ -> Void in
             if let response = response as? HTTPURLResponse,
@@ -544,7 +544,7 @@ final public class EvanderNetworking {
                 }
             }
         }
-        var request = URLRequest(url: url, timeoutInterval: 30)
+        var request = URLRequest(url: url, timeoutInterval: EvanderDownloader.timeoutInterval)
         request.httpMethod = method
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)

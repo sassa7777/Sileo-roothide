@@ -27,10 +27,11 @@ final class Repo: Equatable {
     }
     
     var archAvailabile: Bool {
-        NSLog("SileoLog: archAvailabile=\(self.url)")
         if !isFlat && preferredArch==nil {
+            NSLog("SileoLog: archAvailabile \(self.url) : false")
             return false
         }
+        NSLog("SileoLog: archAvailabile \(self.url) : true")
         return true
     }
     
@@ -117,8 +118,9 @@ final class Repo: Equatable {
     }
     
     var totalProgress: CGFloat {
+        NSLog("SileoLog: totalProgress \(startedRefresh) \(releaseProgress) \(packagesProgress) \(releaseGPGProgress) \(self.url)")
         let startProgress: CGFloat = startedRefresh ? 0.1 : 0.0
-        return (((releaseProgress + packagesProgress + releaseGPGProgress)/3.0) * 0.9) + startProgress
+        return ((releaseProgress*0.2 + packagesProgress*0.6 + releaseGPGProgress*0.2) * 0.9) + startProgress
     }
     
     var displayName: String {

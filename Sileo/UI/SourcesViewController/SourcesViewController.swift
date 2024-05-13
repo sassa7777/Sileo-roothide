@@ -15,6 +15,7 @@ final class SourcesViewController: SileoViewController {
     
     private var tableView: SileoTableView?
     public var refreshControl = UIRefreshControl()
+    private var inRefreshing = false
     
     required init?(coder: NSCoder) {
         super.init(coder: coder)
@@ -116,12 +117,25 @@ final class SourcesViewController: SileoViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         updateSileoColors()
+        
+        if inRefreshing {
+            if let tableView = self.tableView, let refreshControl = tableView.refreshControl {
+                refreshControl.endRefreshing()
+                DispatchQueue.main.async { //reactive animate
+                    refreshControl.beginRefreshing()
+                }
+            }
+        }
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         self.navigationController?.navigationBar._hidesShadow = true
         self.tableView?.backgroundColor = .sileoBackgroundColor
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
     }
     
     override func viewDidDisappear(_ animated: Bool) {
@@ -251,6 +265,7 @@ final class SourcesViewController: SileoViewController {
         item?.badgeValue = ""
         let badge = item?.view()?.value(forKey: "_badge") as? UIView ?? UIView()
         self.refreshControl.endRefreshing()
+        self.inRefreshing = false
         let indicators = badge.subviews.filter { $0 is UIActivityIndicatorView }
         for indicator in indicators {
             if let indicator = indicator as? UIActivityIndicatorView {
@@ -262,6 +277,7 @@ final class SourcesViewController: SileoViewController {
     }
     
     func refreshSources(forceUpdate: Bool, forceReload: Bool, isBackground: Bool, useRefreshControl: Bool, useErrorScreen: Bool, completion: ((Bool, NSAttributedString) -> Void)?) {
+        NSLog("SileoLog: refreshSources \(forceUpdate) \(forceReload) \(isBackground) \(useRefreshControl) \(useErrorScreen)")
         let item = self.splitViewController?.tabBarItem
         item?.badgeValue = ""
         guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
@@ -275,12 +291,9 @@ final class SourcesViewController: SileoViewController {
             indicatorView.startAnimating()
             badge?.addSubview(indicatorView)
             
-            if useRefreshControl {
-                if let tableView = self.tableView, let refreshControl = tableView.refreshControl, !refreshControl.isRefreshing {
-                    refreshControl.beginRefreshing()
-                    let yVal = -1 * (refreshControl.frame.maxY + tableView.adjustedContentInset.top)
-                    tableView.setContentOffset(CGPoint(x: 0, y: yVal), animated: true)
-                }
+            self.inRefreshing = true
+            if let tableView = self.tableView, let refreshControl = tableView.refreshControl, !refreshControl.isRefreshing {
+                refreshControl.beginRefreshing()
             }
         }
         
@@ -288,6 +301,7 @@ final class SourcesViewController: SileoViewController {
             addToQueue(repo)
         }
         RepoManager.shared.update(force: forceUpdate, forceReload: forceReload, isBackground: isBackground, completion: { didFindErrors, errorOutput in
+            NSLog("SileoLog: useErrorScreen=\(useErrorScreen) didFindErrors=\(didFindErrors):\(errorOutput)")
             for repo in self.sortedRepoList {
                 self.removeFromQueue(repo)
             }
