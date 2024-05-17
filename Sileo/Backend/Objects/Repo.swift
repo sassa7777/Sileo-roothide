@@ -28,10 +28,10 @@ final class Repo: Equatable {
     
     var archAvailabile: Bool {
         if !isFlat && preferredArch==nil {
-            NSLog("SileoLog: archAvailabile \(self.url) : false")
+//            NSLog("SileoLog: archAvailabile \(self.url) : false")
             return false
         }
-        NSLog("SileoLog: archAvailabile \(self.url) : true")
+//        NSLog("SileoLog: archAvailabile \(self.url) : true")
         return true
     }
     
