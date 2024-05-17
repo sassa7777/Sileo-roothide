@@ -431,6 +431,10 @@ final class RepoManager {
     func checkUpdatesInBackground() {
         _checkUpdatesInBackground(repoList)
     }
+    
+    func checkUpdatesInBackground(_ repo: Repo) {
+        _checkUpdatesInBackground([repo])
+    }
 
     @discardableResult
     func queue(
@@ -533,9 +537,9 @@ final class RepoManager {
     }
 
     public func postProgressNotification(_ repo: Repo?) {
-        DispatchQueue.main.async {
+//        DispatchQueue.main.async {
             NotificationCenter.default.post(name: RepoManager.progressNotification, object: repo)
-        }
+//        }
     }
     
     enum LogType: CustomStringConvertible {
@@ -596,24 +600,28 @@ final class RepoManager {
         }
 
         var errorsFound = false
-        var repos = repos
-        let lock = NSLock()
+        let listlock = NSLock()
+        var repos = RepoManager.shared.repoList.sorted(by: { obj1, obj2 -> Bool in
+            obj1.repoName.localizedCaseInsensitiveCompare(obj2.repoName) == .orderedAscending
+        })
+        
+        for repo in repos {
+            repo.startedRefresh = true
+            self.postProgressNotification(repo)
+        }
 
         for threadID in 0..<(ProcessInfo.processInfo.processorCount * 2) {
             updateGroup.enter() //enter group before async block
             let repoQueue = DispatchQueue(label: "repo-queue-\(threadID)")
             repoQueue.async {
                 while true {
-                    lock.lock()
+                    listlock.lock()
                     guard !repos.isEmpty else {
-                        lock.unlock()
+                        listlock.unlock()
                         break
                     }
                     let repo = repos.removeFirst()
-                    lock.unlock()
-
-                    repo.startedRefresh = true
-                    self.postProgressNotification(repo)
+                    listlock.unlock()
 
                     if !force && !self.repoRequiresUpdate(repo) && !repo.packageDict.isEmpty {
                         if !repo.isLoaded {
@@ -759,7 +767,7 @@ final class RepoManager {
                         log("Could not find release file for \(repo.repoURL)", type: .error)
                         errorsFound = true
 //                        reposUpdated += 1
-                        self.checkUpdatesInBackground()
+                        self.checkUpdatesInBackground(repo)
                         continue
                     }
                     
@@ -838,7 +846,7 @@ final class RepoManager {
                         log("Could not find preferredArch for \(repo.repoURL)", type: .error)
                         errorsFound = true
 //                        reposUpdated += 1
-                        self.checkUpdatesInBackground()
+                        self.checkUpdatesInBackground(repo)
                         continue
                     }
                     
@@ -922,7 +930,7 @@ final class RepoManager {
                                     #if targetEnvironment(macCatalyst)
                                     repo.packageDict = [:]
 //                                    reposUpdated += 1
-                                    self.checkUpdatesInBackground()
+                                    self.checkUpdatesInBackground(repo)
                                     continue
                                     #endif
                                 }
@@ -937,7 +945,7 @@ final class RepoManager {
                             errorsFound = true
                             log("\(repo.repoURL) had no valid GPG signature", type: .error)
 //                            reposUpdated += 1
-                            self.checkUpdatesInBackground()
+                            self.checkUpdatesInBackground(repo)
                             continue
                         }
                         #endif
@@ -1074,7 +1082,7 @@ final class RepoManager {
                     if !NO_PGP {
                         if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) && !isReleaseGPGValid {
 //                            reposUpdated += 1
-                            self.checkUpdatesInBackground()
+                            self.checkUpdatesInBackground(repo)
                             continue
                         }
                         if let releaseGPGFileURL = releaseGPGFileURL {
@@ -1095,7 +1103,7 @@ final class RepoManager {
                     moveFileAsRoot(from: releaseFile.url, to: releaseFileDst)
                     try? FileManager.default.removeItem(at: releaseFile.url.aptUrl)
                     
-                    self.checkUpdatesInBackground()
+                    self.checkUpdatesInBackground(repo)
                     
                     //dismiss progress bar
                     repo.releaseProgress = 0
@@ -1199,9 +1207,9 @@ final class RepoManager {
     func update(force: Bool, forceReload: Bool, isBackground: Bool, repos: [Repo] = RepoManager.shared.repoList, completion: @escaping (Bool, NSAttributedString) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
             PackageListManager.shared.initWait()
-            DispatchQueue.main.async {
+//            DispatchQueue.main.async {
                 self._update(force: force, forceReload: forceReload, isBackground: isBackground, repos: repos, completion: completion)
-            }
+//            }
         }
     }
 
