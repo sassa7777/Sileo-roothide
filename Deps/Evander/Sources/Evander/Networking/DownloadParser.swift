@@ -172,7 +172,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
         
         if let error = error {
             let statusCode = (task.response as? HTTPURLResponse)?.statusCode ?? 522
-            downloader.container.errorCallback?(sessions[task]!, statusCode, error, nil)
+            downloader.container.errorCallback?(downloader, statusCode, error, nil)
         }
         
         //canceled or completed
@@ -186,7 +186,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     public func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
         NSLog("SileoLog: taskIsWaitingForConnectivity \(session) task=\(task.taskIdentifier)")
         guard let downloader = self.sessions[task] else { return }
-        downloader.container.waitingCallback?(sessions[task]!, "Waiting For Connection")
+        downloader.container.waitingCallback?(downloader, "Waiting For Connection")
     }
     
     // The Download started again with some progress
