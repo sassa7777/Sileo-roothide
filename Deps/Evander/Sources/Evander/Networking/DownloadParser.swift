@@ -84,19 +84,6 @@ final public class EvanderDownloader: NSObject {
         self.cancel()
     }
     
-    public func cancel() {
-        NSLog("SileoLog: cancel task=\(self.task?.taskIdentifier) url=\(self.request.url)")
-        if let task = self.task {
-            EvanderDownloadDelegate.shared.sessions.removeValue(forKey: task)
-        }
-        //then
-        task?.cancel()
-    }
-    
-    public func resume() {
-        task?.resume()
-    }
-
     public func make() {
         let task = EvanderDownloader.sessionManager.downloadTask(with: request)
         NSLog("SileoLog: start downloadTask=\(task.taskIdentifier) url=\(self.request.url)")
@@ -104,6 +91,32 @@ final public class EvanderDownloader: NSObject {
         self.task = task
     }
     
+    public func resume() {
+        task?.resume()
+    }
+
+    public func cancel() {
+        NSLog("SileoLog: cancel task=\(self.task?.taskIdentifier) url=\(self.request.url)")
+        if let task = self.task {
+            EvanderDownloadDelegate.shared.sessions.removeValue(forKey: task)
+        }
+        //then
+        task?.cancel()
+        task = nil
+    }
+    
+    public static func dump()
+    {
+        var i=0
+        let total = EvanderDownloadDelegate.shared.sessions.raw.count
+        
+        NSLog("SileoLog: dump EvanderDownloadDelegate.shared.sessions \(total)")
+        
+        for task in EvanderDownloadDelegate.shared.sessions.raw {
+            NSLog("SileoLog: dump \(i)/\(total)  [\(task.key.taskIdentifier)] \(task.key.currentRequest?.url) \(task.key.state) \(task.key.error)")
+            i+=1
+        }
+    }
 }
 
 final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate {
@@ -122,10 +135,12 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     
     // The Download Finished
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        NSLog("SileoLog: didFinishDownloadingTo \(downloadTask.response?.url) task=\(downloadTask.taskIdentifier) url=\(location) response=\(downloadTask.response)")
+        NSLog("SileoLog: didFinishDownloadingTo \(downloadTask.response?.url) task=\(downloadTask.taskIdentifier) url=\(location)  response=\(downloadTask.response)")
         
         guard let downloader = self.sessions[downloadTask] else { return }
-
+        
+        self.sessions.removeValue(forKey: downloadTask)
+        
         let filename = location.lastPathComponent,
             destination = EvanderNetworking.downloadCache.appendingPathComponent(filename)
         do {
@@ -142,7 +157,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
 
         if let response = downloadTask.response,
            let statusCode = (response as? HTTPURLResponse)?.statusCode {
-            if statusCode == 200 || statusCode == 206 { // 206 means partial data, APT handles it fine
+            if statusCode == 200 || statusCode == 206 || statusCode == 304 { // 206 means partial data, APT handles it fine, 304:fileSize=0
                 downloader.container.didFinishCallback?(downloader, statusCode, destination)
             } else {
                 downloader.container.errorCallback?(downloader, statusCode, nil, destination)
@@ -152,33 +167,37 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     }
     
     // The Download has made Progress
-    public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {        NSLog("SileoLog: didWriteData task=\(downloadTask.taskIdentifier)  (\(totalBytesWritten)+\(bytesWritten)/\(totalBytesExpectedToWrite)) \(downloadTask.response)") //totalBytesExpectedToWrite may be -1, no 'Content Length'? or 404
+    public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        
+        NSLog("SileoLog: didWriteData task=\(downloadTask.taskIdentifier)  (\(totalBytesWritten)+\(bytesWritten)/\(totalBytesExpectedToWrite)) \(downloadTask.response)") //totalBytesExpectedToWrite may be -1, no 'Content Length'? or 404
+        
         guard let downloader = self.sessions[downloadTask] else { return }
+        
         if (downloadTask.response as? HTTPURLResponse)?.statusCode == 200 {
             downloader.container.progress.period = bytesWritten
             downloader.container.progress.total = totalBytesWritten
             downloader.container.progress.expected = totalBytesExpectedToWrite
             downloader.container.progressCallback?(downloader, downloader.container.progress)
+        } else {
+            //???
         }
     }
     
     // Checking for errors in the download
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        
         NSLog("SileoLog: didCompleteWithError task=\(task.taskIdentifier) status=\((task.response as? HTTPURLResponse)?.statusCode) \nresp=\(task.response?.url) \nreq=\(task.currentRequest?.url) error=\n\(error)")
         
         guard let downloader = self.sessions[task] else { return }
         
+        self.sessions.removeValue(forKey: task)
+        
+        //statusCode=200: canceled or completed
         //timeout: error!=nil, task.response=nil or statusCode=200
         
         if let error = error {
             let statusCode = (task.response as? HTTPURLResponse)?.statusCode ?? 522
             downloader.container.errorCallback?(downloader, statusCode, error, nil)
-        }
-        
-        //canceled or completed
-        if (task.response as? HTTPURLResponse)?.statusCode == 200 {
-            self.sessions.removeValue(forKey: task)
-            return
         }
     }
     

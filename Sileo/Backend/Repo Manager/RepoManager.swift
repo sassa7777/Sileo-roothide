@@ -11,7 +11,9 @@ import Evander
 
 // swiftlint:disable:next type_body_length
 final class RepoManager {
-
+    
+    let NO_PGP = true
+    
     static let progressNotification = Notification.Name("SileoRepoManagerProgress")
     private var repoDatabase = DispatchQueue(label: "org.coolstar.SileoStore.repo-database")
 
@@ -345,19 +347,21 @@ final class RepoManager {
 
     private func _checkUpdatesInBackground(_ repos: [Repo]) {
         NSLog("SileoLog: _checkUpdatesInBackground \(repos)")
-        let metadataUpdateGroup = DispatchGroup()
-        for repo in repos {
-            metadataUpdateGroup.enter()
 
+        for repo in repos {
+            
+            NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(repo.isLoaded) \(cacheFile(named: "Release", for: repo)) \(cacheFile(named: "Release", for: repo).aptContents)")
             if !repo.isLoaded {
                 let releaseFile = cacheFile(named: "Release", for: repo)
                 if let info = releaseFile.aptContents,
                     let release = try? ControlFileParser.dictionary(controlFile: info, isReleaseFile: true).0,
                     let repoName = release["origin"] {
                     repo.repoName = repoName
+                    NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(repo.repoName)")
                     let links = dataDetector.matches(
                         in: repo.repoName, range: NSRange(repoName.startIndex..<repoName.endIndex, in: repoName)
                     )
+                    NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(links)")
                     if !links.isEmpty {
                         repo.repoName = ""
                     }
@@ -367,10 +371,8 @@ final class RepoManager {
                 }
             }
 
-//            if repo.isIconLoaded {
-//                metadataUpdateGroup.leave()
-//            } else {
-//                repo.isIconLoaded = true
+            if !repo.isIconLoaded {
+
                 DispatchQueue.global().async {
                     @discardableResult func image(for url: URL, scale: CGFloat) -> Bool {
                         let cache = EvanderNetworking.imageCache(url, scale: scale)
@@ -379,6 +381,7 @@ final class RepoManager {
                                 repo.repoIcon = image
                             }
                             if !cache.0 {
+                                repo.isIconLoaded = true
                                 return true
                             }
                         }
@@ -387,6 +390,7 @@ final class RepoManager {
                                 repo.repoIcon = UIImage(data: iconData, scale: scale)
                                 EvanderNetworking.saveCache(url, data: iconData)
                             }
+                            repo.isIconLoaded = true
                             return true
                         }
                         return false
@@ -409,23 +413,9 @@ final class RepoManager {
                         }
                     }
                     
-                    metadataUpdateGroup.leave()
                 }
-//            }
+            }
         }
-    }
-
-    private func fixLists() {
-        #if !targetEnvironment(simulator) && !TARGET_SANDBOX
-        var directory: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: CommandPath.lists, isDirectory: &directory)
-        if !exists || !directory.boolValue {
-            NSLog("SileoLog: fixLists \(exists) \(directory) \(directory.boolValue)")
-            spawnAsRoot(args: [CommandPath.mkdir, "-p", rootfs(CommandPath.lists)])
-            spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", rootfs(CommandPath.lists)])
-            spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", rootfs(CommandPath.lists)])
-        }
-        #endif
     }
 
     func checkUpdatesInBackground() {
@@ -436,11 +426,26 @@ final class RepoManager {
         _checkUpdatesInBackground([repo])
     }
 
+    private func fixLists() {
+        #if !targetEnvironment(simulator) && !TARGET_SANDBOX
+        var directory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: CommandPath.lists, isDirectory: &directory)
+        if !exists || !directory.boolValue {
+            NSLog("SileoLog: fixLists \(exists) \(directory) \(directory.boolValue)")
+            spawnAsRoot(args: [CommandPath.rm, "-rf", rootfs(CommandPath.lists)])
+            spawnAsRoot(args: [CommandPath.mkdir, "-p", rootfs(CommandPath.lists)])
+            spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", rootfs(CommandPath.lists)])
+            spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", rootfs(CommandPath.lists)])
+        }
+        #endif
+    }
+
     @discardableResult
     func queue(
         from url: URL?,
+        lastModifiedTime: String? = nil,
         progress: ((EvanderDownloader, DownloadProgress) -> Void)?,
-        success: @escaping (EvanderDownloader, URL) -> Void,
+        success: @escaping (EvanderDownloader, Int,  URL) -> Void,
         failure: @escaping (EvanderDownloader?, Int, Error?) -> Void,
         waiting: ((EvanderDownloader, String) -> Void)? = nil
     ) -> EvanderDownloader? {
@@ -451,7 +456,11 @@ final class RepoManager {
             return nil
         }
 
-        let request = URLManager.urlRequest(url)
+        var request = URLManager.urlRequest(url)
+        if let lastModifiedTime = lastModifiedTime {
+            NSLog("SileoLog: If-Modified-Since: \(lastModifiedTime) for \(url)")
+            request.setValue(lastModifiedTime, forHTTPHeaderField: "If-Modified-Since")
+        }
         guard let task = EvanderDownloader(request: request) else {
             NSLog("SileoLog: EvanderDownloader init failed for \(url)")
             return nil
@@ -468,8 +477,8 @@ final class RepoManager {
             }
             failure(task, status, error)
         }
-        task.didFinishCallback = { task, _, url in
-            success(task, url)
+        task.didFinishCallback = { task, status, url in
+            success(task, status, url)
         }
         task.waitingCallback = { task, message in
             waiting?(task, message)
@@ -480,10 +489,11 @@ final class RepoManager {
 
     func fetch(
         from url: URL,
+        lastModifiedTime: String? = nil,
         withExtensionsUntilSuccess extensions: [String],
         taskupdate: ((EvanderDownloader) -> Void)?,
         progress: ((EvanderDownloader, DownloadProgress) -> Void)?,
-        success: @escaping (EvanderDownloader, URL, URL) -> Void,
+        success: @escaping (EvanderDownloader, Int, URL, URL) -> Void,
         failure: @escaping (EvanderDownloader?, Int, Error?) -> Void
     ) {
         guard !extensions.isEmpty else {
@@ -498,14 +508,15 @@ final class RepoManager {
         }
         let session = queue(
             from: fullURL,
+            lastModifiedTime: lastModifiedTime,
             progress: progress,
-            success: { task, url in
-                success(task, fullURL, url)
+            success: { task, status, url in
+                success(task, status, fullURL, url)
             },
             failure: { task, status, error in
                 let newExtensions = Array(extensions.dropFirst())
                 guard !newExtensions.isEmpty else { return failure(task, status, error) }
-                self.fetch(from: url, withExtensionsUntilSuccess: newExtensions, taskupdate: taskupdate, progress: progress, success: success, failure: failure)
+                self.fetch(from: url, lastModifiedTime: lastModifiedTime, withExtensionsUntilSuccess: newExtensions, taskupdate: taskupdate, progress: progress, success: success, failure: failure)
             }
         )
         
@@ -516,24 +527,28 @@ final class RepoManager {
             failure(nil, 520, nil)
         }
     }
+    
+    private func packagesLastUpdatedTime(_ repo: Repo) -> String? {
 
-    private func repoRequiresUpdate(_ repo: Repo) -> Bool {
-        return true
-        //this may not work since the Packages file will not be updated if its hash has not changed
-//        PackageListManager.shared.initWait()
-//        if !repo.packagesExist {
-//            return true
-//        }
-//        let packagesFile = cacheFile(named: "Packages", for: repo)
-//        if !packagesFile.exists {
-//            return true
-//        }
-//        guard let attributes = try? FileManager.default.attributesOfItem(atPath: packagesFile.path),
-//              let modifiedDate = attributes[.modificationDate] as? Date
-//        else {
-//            return true
-//        }
-//        return Date().timeIntervalSince(modifiedDate) > 3 * 3600
+        if !repo.packagesExist {
+            return nil
+        }
+        let packagesFile = cacheFile(named: "Packages", for: repo)
+        if !packagesFile.exists {
+            return nil
+        }
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: packagesFile.path),
+              let modifiedDate = attributes[.modificationDate] as? Date
+        else {
+            return nil
+        }
+
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone.init(abbreviation: "GMT")
+        formatter.dateFormat = "E, d MMM yyyy HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US")
+
+        return "\(formatter.string(from: modifiedDate)) GMT"
     }
 
     public func postProgressNotification(_ repo: Repo?) {
@@ -601,7 +616,7 @@ final class RepoManager {
 
         var errorsFound = false
         let listlock = NSLock()
-        var repos = RepoManager.shared.repoList.sorted(by: { obj1, obj2 -> Bool in
+        var repos = repos.sorted(by: { obj1, obj2 -> Bool in
             obj1.repoName.localizedCaseInsensitiveCompare(obj2.repoName) == .orderedAscending
         })
         
@@ -610,7 +625,7 @@ final class RepoManager {
             self.postProgressNotification(repo)
         }
 
-        for threadID in 0..<(ProcessInfo.processInfo.processorCount * 2) {
+        for threadID in 0..<min(repos.count, ProcessInfo.processInfo.processorCount * 2 * (isBackground ? 1 : 2)) {
             updateGroup.enter() //enter group before async block
             let repoQueue = DispatchQueue(label: "repo-queue-\(threadID)")
             repoQueue.async {
@@ -622,15 +637,6 @@ final class RepoManager {
                     }
                     let repo = repos.removeFirst()
                     listlock.unlock()
-
-                    if !force && !self.repoRequiresUpdate(repo) && !repo.packageDict.isEmpty {
-                        if !repo.isLoaded {
-                            repo.isLoaded = true
-                            self.postProgressNotification(repo)
-                        }
-                        NSLog("SileoLog: skipUpdate repo=\(repo) \(self.repoRequiresUpdate(repo)) \(repo.packageDict.isEmpty)")
-                        continue
-                    }
 
                     let ReleaseFileSemaphore = DispatchSemaphore(value: 0)
                     let PackagesFileSemaphore = DispatchSemaphore(value: 0)
@@ -649,7 +655,7 @@ final class RepoManager {
                             repo.releaseProgress = CGFloat(progress.fractionCompleted)
                             self.postProgressNotification(repo)
                         },
-                        success: { task, fileURL in
+                        success: { task, status, fileURL in
                             defer {
                                 ReleaseFileSemaphore.signal()
                             }
@@ -712,7 +718,7 @@ final class RepoManager {
                             log("\(releaseURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
                             errorsFound = true
 //                            repo.releaseProgress = 1
-                            self.postProgressNotification(repo)
+//                            self.postProgressNotification(repo)
                         }
                     )
                     releaseTask?.resume()
@@ -720,37 +726,38 @@ final class RepoManager {
                     var startTime = Date()
                     let refreshTimeout: TimeInterval = isBackground ? 10 : 20
                     
-                    let NO_PGP = true
+                    var releaseGPGTask: EvanderDownloader? = nil
+                    defer { releaseGPGTask?.cancel() }
                     let releaseGPGFileDst = self.cacheFile(named: "Release.gpg", for: repo)
                     let releaseGPGURL = URL(string: repo.repoURL)!.appendingPathComponent("Release.gpg")
-                    let releaseGPGTask = self.queue(
-                        from: releaseGPGURL,
-                        progress: { task, progress in
-                            repo.releaseGPGProgress = CGFloat(progress.fractionCompleted)
-                            self.postProgressNotification(repo)
-                        },
-                        success: { task, fileURL in
-                            defer {
-                                ReleaseGPGFileSemaphore.signal()
-                            }
-                            releaseGPGFileURL = fileURL
-                            repo.releaseGPGProgress = 1
-                            self.postProgressNotification(repo)
-                        },
-                        failure: { task, status, error in
-                            defer {
-                                ReleaseGPGFileSemaphore.signal()
-                            }
+                    if !self.NO_PGP {
+                        releaseGPGTask = self.queue(
+                            from: releaseGPGURL,
+                            progress: { task, progress in
+                                repo.releaseGPGProgress = CGFloat(progress.fractionCompleted)
+                                self.postProgressNotification(repo)
+                            },
+                            success: { task, status, fileURL in
+                                defer {
+                                    ReleaseGPGFileSemaphore.signal()
+                                }
+                                releaseGPGFileURL = fileURL
+                                repo.releaseGPGProgress = 1
+                                self.postProgressNotification(repo)
+                            },
+                            failure: { task, status, error in
+                                defer {
+                                    ReleaseGPGFileSemaphore.signal()
+                                }
 
-                            if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
-                                log("\(releaseGPGURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
-                                errorsFound = true
+                                if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
+                                    log("\(releaseGPGURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
+                                    errorsFound = true
+                                }
+    //                            repo.releaseGPGProgress = 1
+//                                self.postProgressNotification(repo)
                             }
-//                            repo.releaseGPGProgress = 1
-                            self.postProgressNotification(repo)
-                        }
-                    )
-                    if !NO_PGP {
+                        )
                         releaseGPGTask?.resume()
                     } else {
                         repo.releaseGPGProgress = 1
@@ -762,6 +769,7 @@ final class RepoManager {
                     if ReleaseFileSemaphore.wait(timeout: .now() + refreshTimeout - Date().timeIntervalSince(startTime)) != .success {
                         releaseTask?.cancel()
                     }
+                    
                     guard let releaseFile = optReleaseFile else {
                         NSLog("SileoLog: optReleaseFile=\(optReleaseFile)")
                         log("Could not find release file for \(repo.repoURL)", type: .error)
@@ -840,7 +848,10 @@ final class RepoManager {
                             }
                         }
                     }
-                    escapeEarly() //may set breakOff=true
+                    if !force {
+                        //check whether the hash of the Packages file in Release has changed
+                        escapeEarly() //may set breakOff=true
+                    }
 
                     if repo.isFlat==false && preferredArch==nil {
                         log("Could not find preferredArch for \(repo.repoURL)", type: .error)
@@ -860,9 +871,11 @@ final class RepoManager {
                     
                     //request Packages File
                     var packagesTask: EvanderDownloader? = nil;
+                    defer { packagesTask?.cancel() }
                     if !breakOff {
                         self.fetch(
                             from: packagesUrl!,
+                            lastModifiedTime: force ? nil : self.packagesLastUpdatedTime(repo),
                             withExtensionsUntilSuccess: extensions,
                             taskupdate: { task in
                                 packagesTask = task
@@ -875,11 +888,15 @@ final class RepoManager {
                                     task.cancel()
                                 }
                             },
-                            success: { task, succeededURL, fileURL in
+                            success: { task, status, succeededURL, fileURL in
                                 defer {
-                                    if !breakOff {
+                                    if !breakOff || status == 304 {
                                         PackagesFileSemaphore.signal()
                                     }
+                                }
+                                
+                                if status == 304 {
+                                    breakOff = true
                                 }
                                 
                                 if !breakOff {
@@ -891,15 +908,10 @@ final class RepoManager {
                                     
                                     let fileName = succeededURL.absoluteString.dropFirst(repoURL.count + substringOffset)
                                     optPackagesFile = (fileURL, String(fileName))
-                                    
-                                    repo.packagesProgress = 1
-                                    self.postProgressNotification(repo)
-                                } else {
-                                    repo.packagesProgress = 0
-                                    repo.releaseProgress = 0
-                                    repo.releaseGPGProgress = 0
-                                    self.postProgressNotification(repo)
                                 }
+
+                                repo.packagesProgress = 1
+                                self.postProgressNotification(repo)
                             },
                             failure: { task, status, error in
                                 defer {
@@ -907,15 +919,15 @@ final class RepoManager {
                                 }
                                 log("\(packagesUrl) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
                                 errorsFound = true
-//                                repo.packagesProgress = 1
-                                self.postProgressNotification(repo)
+//                                repo.packagesProgress = 0
+//                                self.postProgressNotification(repo)
                             }
                         )
                     }
                     
                     //verify GPG
                     var isReleaseGPGValid = false
-                    if !NO_PGP {
+                    if !self.NO_PGP {
                         if ReleaseGPGFileSemaphore.wait(timeout: .now() + refreshTimeout - Date().timeIntervalSince(startTime))  != .success {
                             releaseGPGTask?.cancel()
                         }
@@ -982,7 +994,7 @@ final class RepoManager {
                             errorsFound = true
                         }
                         let (shouldSkip, hash) = self.ignorePackages(repo: repo, packagesURL: packagesFile.url, type: succeededExtension, destinationPath: packagesFileDst, hashtype: hashToSave)
-                        skipPackages = shouldSkip
+                        skipPackages = shouldSkip && !force
                         NSLog("SileoLog: skipPackages=\(skipPackages)")
                         func loadPackageData() {
                             if !skipPackages {
@@ -1079,7 +1091,7 @@ final class RepoManager {
                         try? FileManager.default.setAttributes(attributes, ofItemAtPath: packagesFileDst.path)
                     }
 
-                    if !NO_PGP {
+                    if !self.NO_PGP {
                         if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) && !isReleaseGPGValid {
 //                            reposUpdated += 1
                             self.checkUpdatesInBackground(repo)
@@ -1105,6 +1117,14 @@ final class RepoManager {
                     
                     self.checkUpdatesInBackground(repo)
                     
+                    if preferredArch != dpkgArchitectures.primary.rawValue {
+                        let packages = PackageListManager.shared.packageList(identifier: "--contextRootHide", repoContext: repo)
+                        if packages.count > 0 {
+                            log("Didn't find availabile architectures in \(repo.releaseDict?["architectures"]) : \(releaseURL)", type: .warning)
+                            errorsFound = true
+                        }
+                    }
+                    
                     //dismiss progress bar
                     repo.releaseProgress = 0
                     repo.packagesProgress = 0
@@ -1120,6 +1140,8 @@ final class RepoManager {
         updateGroup.notify(queue: .main) {
             #if !targetEnvironment(macCatalyst)
             var files = self.cachePrefix.implicitContents
+            
+//            EvanderDownloader.dump()
 
             var expectedFiles: [String] = []
             expectedFiles = self.repoList.flatMap { (repo: Repo) -> [String] in
@@ -1133,10 +1155,13 @@ final class RepoManager {
                 #if ENABLECACHINGBETA
                 names.append("Packages.plist")
                 #endif
+                
+                //dismiss progress bar for any repo (also broken repos)
                 repo.releaseProgress = 0
                 repo.packagesProgress = 0
                 repo.releaseGPGProgress = 0
                 repo.startedRefresh = false
+                
                 return names.map {
                     self.cacheFile(named: $0, for: repo).lastPathComponent
                 }
@@ -1147,7 +1172,10 @@ final class RepoManager {
             files.removeAll { expectedFiles.contains($0.lastPathComponent) }
             files.forEach(deleteFileAsRoot)
             #endif
+            
+            //dismiss progress bar for broken repos
             self.postProgressNotification(nil)
+            
             NSLog("SileoLog: reposUpdated=\(reposUpdated)")
             if reposUpdated > 0 {
                 DownloadManager.aptQueue.async {

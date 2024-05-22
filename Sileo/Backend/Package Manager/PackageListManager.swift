@@ -66,14 +66,23 @@ final class PackageListManager {
                 self.isLoaded = true
                 while true {
                     if self.initSemphaore.signal() == 0 {
+                        NSLog("SileoLog: PackageListManager initSemphaore.signal()")
                         break
                     }
                 }
+                
                 DownloadManager.aptQueue.async {
-                    DependencyResolverAccelerator.shared.preflightInstalled()
+                    NSLog("SileoLog: DependencyResolverAccelerator.shared \(Date())")
+                    let accelerator = DependencyResolverAccelerator.shared // 0.3s
+                    NSLog("SileoLog: DependencyResolverAccelerator.shared \(Date())")
+                    NSLog("SileoLog: DependencyResolverAccelerator.preflightInstalled() \(Date())")
+                    accelerator.preflightInstalled() //2s
+                    NSLog("SileoLog: DependencyResolverAccelerator.preflightInstalled() \(Date())")
                 }
+                
                 NotificationCenter.default.post(name: PackageListManager.reloadNotification, object: nil)
                 NotificationCenter.default.post(name: NewsViewController.reloadNotification, object: nil)
+                
                 if UserDefaults.standard.bool(forKey: "AutoRefreshSources", fallback: true) {
                     // Start a background repo refresh here instead because it doesn't like it in the Source View Controller
                     if let tabBarController = UIApplication.shared.windows.first?.rootViewController as? UITabBarController,

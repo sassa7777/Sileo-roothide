@@ -177,6 +177,7 @@ final public class EvanderNetworking {
             }
         }
         URLSession.shared.dataTask(with: request) { data, response, error -> Void in
+            NSLog("SileoLog: URLSession.shared.dataTask completed \(response) \(error) \(data)")
             let statusCode = (response as? HTTPURLResponse)?.statusCode
             if ENABLE_COOKIES {
                 if let httpResponse = response as? HTTPURLResponse,

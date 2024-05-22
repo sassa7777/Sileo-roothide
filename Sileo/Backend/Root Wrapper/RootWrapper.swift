@@ -279,6 +279,7 @@ final public class MacRootWrapper {
 }
 
 func deleteFileAsRoot(_ url: URL) {
+    guard FileManager.default.fileExists(atPath: url.path) else {return}
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.removeItem(at: url)
     #else
@@ -304,6 +305,15 @@ func moveFileAsRoot(from: URL, to: URL) {
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.moveItem(at: from, to: to)
     #else
+    // /var/mobile/Library/Caches/Sileo/Downloads/CFNetworkDownload_*.tmp
+    if let attributes = try? FileManager.default.attributesOfItem(atPath: from.path),
+       let permissions = attributes[.posixPermissions] as? NSNumber {
+        NSLog("SileoLog: moveFileAsRoot perm=\(String(format:"%o", permissions.intValue)) from \(from) to \(to)")
+        if permissions.intValue == 0o600 {
+            spawnAsRoot(args: [CommandPath.chmod, "0666", rootfs("\(from.path)")])
+        }
+    }
+
     spawnAsRoot(args: [CommandPath.mv, rootfs("\(from.path)"), rootfs("\(to.path)")])
     spawnAsRoot(args: [CommandPath.chown, "0:0", rootfs("\(to.path)")])
     spawnAsRoot(args: [CommandPath.chmod, "0644", rootfs("\(to.path)")])

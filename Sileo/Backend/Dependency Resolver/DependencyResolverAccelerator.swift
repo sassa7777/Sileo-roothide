@@ -82,14 +82,17 @@ class DependencyResolverAccelerator {
     }
     
     public func getDependencies(packages: [Package]) throws {
+        NSLog("SileoLog: getDependencies1")
         if Thread.isMainThread {
             fatalError("Don't call things that will block the UI from the main thread")
         }
         PackageListManager.shared.initWait()
+        NSLog("SileoLog: getDependencies2")
 
         for package in packages {
             getDependenciesInternal(package: package)
         }
+        NSLog("SileoLog: getDependencies3 \(toBePreflighted.count)")
         
         let resolverPrefix = depResolverPrefix
         for (sourcesFile, packages) in toBePreflighted {
@@ -120,6 +123,7 @@ class DependencyResolverAccelerator {
             let preflighted = preflightedPackages[sourcesFile] ?? Set<PreflightedPackage>()
             preflightedPackages[sourcesFile] = preflighted.union(packages)
         }
+        NSLog("SileoLog: getDependencies4")
     }
     
     private func getDependenciesInternal(package: Package) {

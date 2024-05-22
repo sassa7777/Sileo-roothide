@@ -118,7 +118,7 @@ final class Repo: Equatable {
     }
     
     var totalProgress: CGFloat {
-        NSLog("SileoLog: totalProgress \(startedRefresh) \(releaseProgress) \(packagesProgress) \(releaseGPGProgress) \(self.url)")
+//        NSLog("SileoLog: totalProgress \(startedRefresh) \(releaseProgress) \(packagesProgress) \(releaseGPGProgress) \(self.url)")
         let startProgress: CGFloat = startedRefresh ? 0.1 : 0.0
         return ((releaseProgress*0.2 + packagesProgress*0.6 + releaseGPGProgress*0.2) * 0.9) + startProgress
     }

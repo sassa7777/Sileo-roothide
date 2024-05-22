@@ -147,12 +147,12 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
         stateBadgeView?.isHidden = false
         let queueState = DownloadManager.shared.find(package: targetPackage)
         switch queueState {
-        case .installations:
+        case .installdeps, .installations:
             let isInstalled = PackageListManager.shared.installedPackage(identifier: targetPackage.package) != nil
             stateBadgeView?.state = isInstalled ? .reinstallQueued : .installQueued
         case .upgrades:
             stateBadgeView?.state = .updateQueued
-        case .uninstallations:
+        case .uninstalldeps, .uninstallations:
             stateBadgeView?.state = .deleteQueued
         default:
             let isInstalled = PackageListManager.shared.installedPackage(identifier: targetPackage.package) != nil

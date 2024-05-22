@@ -81,6 +81,9 @@ class DpkgWrapper {
         return defaultArchitectures
         #else
         
+        //acc
+        return defaultArchitectures
+        
         let (localStatus, localArchs, _) = spawn(command: CommandPath.dpkg, args: ["dpkg", "--print-architecture"])
         guard localStatus == 0 else {
             return defaultArchitectures

@@ -20,13 +20,14 @@ public enum DownloadManagerQueue: Int {
 
 final class DownloadManager {
     static let lockStateChangeNotification = Notification.Name("SileoDownloadManagerLockStateChanged")
+    
+    public static let queueContext = 50
+    public static let queueKey = DispatchSpecificKey<Int>()
     static let aptQueue: DispatchQueue = {
         let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInitiated)
         queue.setSpecific(key: DownloadManager.queueKey, value: DownloadManager.queueContext)
         return queue
     }()
-    public static let queueKey = DispatchSpecificKey<Int>()
-    public static let queueContext = 50
     
     enum Error: LocalizedError {
         case hashMismatch(packageHash: String, refHash: String)
@@ -66,19 +67,27 @@ final class DownloadManager {
     }
     public var totalProgress = CGFloat(0)
     
-    var upgrades = SafeSet<DownloadPackage>(queue: aptQueue, key: queueKey, context: queueContext)
-    var installations = SafeSet<DownloadPackage>(queue: aptQueue, key: queueKey, context: queueContext)
-    var uninstallations = SafeSet<DownloadPackage>(queue: aptQueue, key: queueKey, context: queueContext)
-    var installdeps = SafeSet<DownloadPackage>(queue: aptQueue, key: queueKey, context: queueContext)
-    var uninstalldeps = SafeSet<DownloadPackage>(queue: aptQueue, key: queueKey, context: queueContext)
-    var errors = SafeSet<APTBrokenPackage>(queue: aptQueue, key: queueKey, context: queueContext)
+    public static let dataQueueContext = 50
+    public static let dataQueueKey = DispatchSpecificKey<Int>()
+    static let dataQueue: DispatchQueue = {
+        let queue = DispatchQueue(label: "Sileo.dataQueue", qos: .userInitiated)
+        queue.setSpecific(key: DownloadManager.queueKey, value: DownloadManager.queueContext)
+        return queue
+    }()
+    
+    var upgrades = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    var installations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    var uninstallations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    var installdeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    var uninstalldeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    var errors = SafeSet<APTBrokenPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
     
     private var currentDownloads = 0
     public var queueStarted = false
-    var downloads = SafeDictionary<String,Download>(queue: aptQueue, key: queueKey, context: queueContext)
-    var cachedFiles = SafeArray<URL>(queue: aptQueue, key: queueKey, context: queueContext)
+    var downloads = SafeDictionary<String,Download>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    var cachedFiles = SafeArray<URL>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
         
-    var repoDownloadOverrideProviders = SafeDictionary<String, Set<AnyHashable>>(queue: aptQueue, key: queueKey, context: queueContext)
+    var repoDownloadOverrideProviders = SafeDictionary<String, Set<AnyHashable>>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
     
     var viewController: DownloadsTableViewController
     
@@ -188,7 +197,7 @@ final class DownloadManager {
                 DispatchQueue.main.async {
                     self.viewController.reloadDownload(package: package)
                 }
-            }, success: { task, fileURL in
+            }, success: { task, status, fileURL in
                 self.currentDownloads -= 1
                 let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
                 let fileSize = attributes?[FileAttributeKey.size] as? Int
@@ -820,7 +829,7 @@ final class DownloadManager {
                     msg = "\(Int(progress.fractionCompleted * 100))% ..."
                 }
                 updateMsg(msg: msg)
-            }, success: { task, fileURL in
+            }, success: { task, status, fileURL in
                 
                 let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
                 let fileSize = attributes?[FileAttributeKey.size] as? Int

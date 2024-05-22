@@ -194,7 +194,6 @@ final class SourcesViewController: SileoViewController {
         
         let URLs = _tmpManager.repoList.compactMap(\.url)
         self.handleSourceAdd(urls: URLs, bypassFlagCheck: false)
-        self.refreshSources(forceUpdate: true, forceReload: true)
     }
     
     @available(iOS 14.0, *)
@@ -241,7 +240,7 @@ final class SourcesViewController: SileoViewController {
     }
     
     @IBAction func refreshSources(_ sender: UIRefreshControl?) {
-        self.refreshSources(forceUpdate: true, forceReload: true)
+        self.refreshSources(forceUpdate: false, forceReload: true)
     }
     
     func refreshSources(forceUpdate: Bool, forceReload: Bool) {
@@ -364,7 +363,7 @@ final class SourcesViewController: SileoViewController {
             addToQueue(repo)
         }
         
-        RepoManager.shared.update(force: false, forceReload: true, isBackground: false, repos: repos) { [weak self] didFindErrors, errorOutput in
+        RepoManager.shared.update(force: true, forceReload: true, isBackground: false, repos: repos) { [weak self] didFindErrors, errorOutput in
             guard let strongSelf = self else { return }
             for repo in repos {
                 strongSelf.removeFromQueue(repo)
@@ -616,34 +615,18 @@ final class SourcesViewController: SileoViewController {
     }
     #endif
 
-    func showFlaggedSourceWarningController(urls: [URL]) {
-        let flaggedSourceController = FlaggedSourceWarningViewController(nibName: "FlaggedSourceWarningViewController", bundle: nil)
-        flaggedSourceController.shouldAddAnywayCallback = {
-            self.handleSourceAdd(urls: urls, bypassFlagCheck: true)
-            self.refreshSources(forceUpdate: false, forceReload: false)
-        }
-        flaggedSourceController.urls = urls
-        flaggedSourceController.modalPresentationStyle = .formSheet
-        present(flaggedSourceController, animated: true)
-    }
+//    func showFlaggedSourceWarningController(urls: [URL]) {
+//        let flaggedSourceController = FlaggedSourceWarningViewController(nibName: "FlaggedSourceWarningViewController", bundle: nil)
+//        flaggedSourceController.shouldAddAnywayCallback = {
+//            self.handleSourceAdd(urls: urls, bypassFlagCheck: true)
+//        }
+//        flaggedSourceController.urls = urls
+//        flaggedSourceController.modalPresentationStyle = .formSheet
+//        present(flaggedSourceController, animated: true)
+//    }
     
     func handleSourceAdd(urls: [URL], bypassFlagCheck: Bool) {
-        func handleAdd() {
-//            CanisterResolver.piracy(urls) { safe, piracy in
-//                DispatchQueue.main.async {
-//                    if !safe.isEmpty {
-//                        let repos = RepoManager.shared.addRepos(with: safe)
-//                        if !repos.isEmpty {
-//                            self.reloadData()
-//                            self.updateSpecific(repos)
-//                        }
-//                    }
-//                    if !piracy.isEmpty {
-//                        self.showFlaggedSourceWarningController(urls: piracy)
-//                    }
-//                }
-//            }
-            
+        func addRepo() {
             DispatchQueue.main.async {
                 let repos = RepoManager.shared.addRepos(with: urls)
                 if !repos.isEmpty {
@@ -652,43 +635,56 @@ final class SourcesViewController: SileoViewController {
                 }
             }
         }
-        if !bypassFlagCheck {
-            if urls.count == 1 {
-                let url = urls[0]
-                if url.host == "apt.bigboss.org"
-                    || url.host == "apt.thebigboss.org"
-                    || url.host == "thebigboss.org"
-                    || url.host == "bigboss.org"
-                    || url.host == "apt.procurs.us" {
-                    return handleAdd()
-                }
-                EvanderNetworking.head(url: url.appendingPathComponent("Release")) { success in
-                    if success {
-                        handleAdd()
-                    } else {
-                        DispatchQueue.main.async { [self] in
-                            let alert = UIAlertController(title: String(localizationKey: "Warning"),
-                                                          message: String(format: String(localizationKey: "Incorrect_Repo"), url.absoluteString),
-                                                          preferredStyle: .alert)
-                            alert.addAction(UIAlertAction(title: String(localizationKey: "Add_Source.Title"), style: .default, handler: { _ in
-                                handleAdd()
-                            }))
-                            alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
-                                alert.dismiss(animated: true)
-                            }))
-                            self.present(alert, animated: true)
-                        }
+        func handleAdd() {
+//            CanisterResolver.piracy(urls) { safe, piracy in
+//                DispatchQueue.main.async {
+//                    if !safe.isEmpty {
+//                        addRepo()
+//                    }
+//                    if !piracy.isEmpty {
+//                        self.showFlaggedSourceWarningController(urls: piracy)
+//                    }
+//                }
+//            }
+            
+            
+            addRepo()
+        }
+        
+        if bypassFlagCheck {
+            addRepo()
+            return
+        }
+        
+        if urls.count == 1 {
+            let url = urls[0]
+            if url.host == "apt.bigboss.org"
+                || url.host == "apt.thebigboss.org"
+                || url.host == "thebigboss.org"
+                || url.host == "bigboss.org"
+                || url.host == "apt.procurs.us" {
+                return handleAdd()
+            }
+            EvanderNetworking.head(url: url.appendingPathComponent("Release")) { success in
+                if success {
+                    handleAdd()
+                } else {
+                    DispatchQueue.main.async { [self] in
+                        let alert = UIAlertController(title: String(localizationKey: "Warning"),
+                                                      message: String(format: String(localizationKey: "Incorrect_Repo"), url.absoluteString),
+                                                      preferredStyle: .alert)
+                        alert.addAction(UIAlertAction(title: String(localizationKey: "Add_Source.Title"), style: .default, handler: { _ in
+                            handleAdd()
+                        }))
+                        alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
+                            alert.dismiss(animated: true)
+                        }))
+                        self.present(alert, animated: true)
                     }
                 }
-            } else {
-                handleAdd()
             }
         } else {
-            let repos = RepoManager.shared.addRepos(with: urls)
-            if !repos.isEmpty {
-                self.reloadData()
-                self.updateSpecific(repos)
-            }
+            handleAdd()
         }
     }
     

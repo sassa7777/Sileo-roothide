@@ -122,13 +122,14 @@ class PackageQueueButton: PackageButton {
             self.isEnabled = false
             return
         }
-        installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
-            
-        purchased = paymentInfo?.purchased ?? false
-//        NSLog("SileoLog: purchased=\(purchased)")
         
+        installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
+        purchased = paymentInfo?.purchased ?? false
+        
+        //Competition with DependencyResolverAccelerator.shared.preflightInstalled()->init(){4 spawns} for aptQueue causes a two second lag
         let queueFound = DownloadManager.shared.find(package: package)
         var prominent = false
+        
         if !overrideTitle.isEmpty {
             self.updateButton(title: overrideTitle)
         } else if queueFound != .none {
