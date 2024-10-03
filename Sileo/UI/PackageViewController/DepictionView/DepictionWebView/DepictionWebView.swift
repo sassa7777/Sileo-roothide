@@ -103,7 +103,7 @@ class DepictionWebView: DepictionBaseView {
 extension DepictionWebView: WKUIDelegate {
     func webView(_ webView: WKWebView, previewingViewControllerForElement elementInfo: WKPreviewElementInfo, defaultActions previewActions: [WKPreviewActionItem]) -> UIViewController? {
         guard let url = elementInfo.linkURL,
-            let scheme = url.scheme else {
+              let scheme = url.scheme?.lowercased() else {
             return nil
         }
         if scheme == "http" || scheme == "https" {

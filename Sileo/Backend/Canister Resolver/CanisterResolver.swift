@@ -32,26 +32,39 @@ final class CanisterResolver {
         fetch?(false); return false
         #endif
         guard UserDefaults.standard.bool(forKey: "ShowProvisional", fallback: true) else { fetch?(false); return false }
-        guard query.count >= 2,
+        guard query.lengthOfBytes(using: String.Encoding.utf8) >= 2,
            !savedSearch.contains(query),
            let formatted = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { fetch?(false); return false }
-        let url = "https://api.canister.me/v2/jailbreak/package/search?q=\(formatted)"
+        let url = "https://api.canister.me/v2/jailbreak/package/search?limit=250&q=\(formatted)"
         EvanderNetworking.request(url: url, type: Data.self, cache: .init(localCache: false)) { [self] success, _, _, data in
-            guard success,
-                  let data,
-                  let response = try? ZippyJSONDecoder().decode(PackageSearchResponse.self, from: data) else {
+            NSLog("SileoLog: CanisterResolver.fetch \(query): \(success),\(data)")
+            
+            guard success, let data else {
                 return
             }
-            self.savedSearch.append(query)
-            var change = false
-            for package in response.data ?? [] {
-                if !self.packages.contains(where: { $0.package == package.package }) && package.repository.isBootstrap == false && !DpkgWrapper.architecture.valid(arch: package.architecture) {
-                    change = true
-                    self.packages.append(package)
+                        
+            do {
+                let response = try ZippyJSONDecoder().decode(PackageSearchResponse.self, from: data)
+                
+                self.savedSearch.append(query)
+                var change = false
+                for package in response.data ?? [] {
+                    if !self.packages.contains(where: { $0.package == package.package })
+                        && package.repository.isBootstrap==false //the suite of bootstrap repo may not match the current device, so we have to ignore it
+                        && DpkgWrapper.architecture.valid(arch: package.architecture)
+                    {
+                        change = true
+                        self.packages.append(package)
+                        NSLog("SileoLog: CanisterResolver new package: \(package.package) \(package.repository.uri)")
+                    }
                 }
+                NSLog("SileoLog: CanisterResolver.packages: \(self.packages.count)")
+                fetch?(change)
+                
+            } catch {
+                NSLog("SileoLog: JSONDecoder err=\(error)")
+                return
             }
-            
-            fetch?(change)
         }
         return true
     }
@@ -68,11 +81,11 @@ final class CanisterResolver {
         }
         if packages.isEmpty { fetch?(false); return false }
         let identifiers = packages.joined(separator: ",")
+        NSLog("SileoLog: CanisterResolver.batchFetch identifiers=\(identifiers)")
         guard let formatted = identifiers.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { fetch?(false); return false }
         let url = "https://api.canister.me/v2/jailbreak/package/multi?ids=\(formatted)"
         EvanderNetworking.request(url: url, type: Data.self, cache: .init(localCache: false)) { [self] success, _, _, data in
-            guard success,
-                  let data else {
+            guard success, let data else {
                 return
             }
             do {
@@ -80,14 +93,19 @@ final class CanisterResolver {
                 self.savedSearch += packages
                 var change = false
                 for package in response.data ?? [] {
-                    if !self.packages.contains(where: { $0.package == package.package }) && package.repository.isBootstrap == false && !DpkgWrapper.architecture.valid(arch: package.architecture) {
+                    NSLog("SileoLog: CanisterResolver batch package: \(package.package) \(package.repository.uri)")
+                    if !self.packages.contains(where: { $0.package == package.package })
+                        && package.repository.isBootstrap == false
+                        && DpkgWrapper.architecture.valid(arch: package.architecture)
+                    {
                         change = true
                         self.packages.append(package)
+                        NSLog("SileoLog: CanisterResolver new package: \(package.package) \(package.repository.uri)")
                     }
                 }
                 fetch?(change)
             } catch {
-                print(error)
+                NSLog("SileoLog: JSONDecoder err=\(error)")
             }
         }
         return true
@@ -123,7 +141,11 @@ final class CanisterResolver {
     }
     
     public func queuePackage(_ package: Package) {
-        cachedQueue.removeAll { $0.packageID == package.packageID }
+        NSLog("queuePackage \(package.package) \(package.architecture) \(package.sourceRepo?.preferredArch)")
+        if !checkRootHide(package) {
+            return
+        }
+        cachedQueue.removeAll { $0.package == package.package }
         cachedQueue.append(package)
     }
     
@@ -132,14 +154,14 @@ final class CanisterResolver {
         var buffer = 0
         var refreshLists = false
         for (index, package) in cachedQueue.enumerated() {
-            if let pkg = plm.package(identifier: package.packageID, version: package.version) ?? plm.newestPackage(identifier: package.packageID, repoContext: nil) {
+            if let pkg = plm.package(identifier: package.package, version: package.version) ?? plm.newestPackage(identifier: package.package, repoContext: nil) {
                 let queueFound = DownloadManager.shared.find(package: pkg)
                 if queueFound == .none {
                     DownloadManager.shared.add(package: pkg, queue: .installations)
                 }
                 cachedQueue.remove(at: index - buffer)
                 buffer += 1
-                self.packages.removeAll(where: { $0.package == package.packageID })
+                self.packages.removeAll(where: { $0.package == package.package })
                 refreshLists = true
             }
         }
@@ -151,9 +173,11 @@ final class CanisterResolver {
     
     public class func package(_ provisional: ProvisionalPackage) -> Package? {
         let package = Package(package: provisional.package, version: provisional.version)
-        package.name = provisional.name
-        package.source = provisional.repository.uri
-        package.icon = provisional.icon
+        package.name = provisional.name ?? provisional.package
+        package.source = provisional.repository
+        if let url = URL(string: provisional.icon) {
+            package.icon = url
+        }
         package.packageDescription = provisional.description
         package.author = provisional.author
         package.depiction = provisional.sileoDepiction
@@ -189,7 +213,7 @@ final class CanisterResolver {
         let repository_uri: String?
         
         init(package: Package) {
-            self.package_id = package.packageID
+            self.package_id = package.package
             self.package_version = package.version
             self.package_author = package.author?.string
             self.package_maintainer = package.maintainer?.string
@@ -241,7 +265,6 @@ struct ProvisionalPackage: PackageProtocol, Decodable {
     
     let package: String
     let version: String
-    
     let name: String?
     let maintainer: Maintainer?
     let author: Maintainer?
@@ -249,7 +272,7 @@ struct ProvisionalPackage: PackageProtocol, Decodable {
     let section: String?
     let description: String?
     
-    let icon: URL?
+    let icon: String?
     let sileoDepiction: URL?
     let header: URL?
     
@@ -276,10 +299,13 @@ struct ProvisionalPackage: PackageProtocol, Decodable {
 struct ProvisionalRepo: Decodable, Equatable, Hashable {
     
     let uri: URL
+    let suite: String
+    let component: String?
+    
+    let name: String?
     let slug: String
     let tier: Int
     
-    let suite: String
     let isBootstrap: Bool
     
     static func ==(lhs: ProvisionalRepo, rhs: ProvisionalRepo) -> Bool {
@@ -294,7 +320,7 @@ struct ProvisionalRepo: Decodable, Equatable, Hashable {
 
 struct PackageSearchResponse: Decodable {
     
-    let message: String
+    let message: String?
     let count: UInt
     let data: [ProvisionalPackage]?
     let error: String?

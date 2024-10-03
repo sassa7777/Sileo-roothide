@@ -36,6 +36,7 @@ final class PaymentAuthenticationBannerView: UIView {
         button.setTitle(bannerDictionary["button"]?.uppercased(), for: .normal)
         button.addTarget(self, action: #selector(PaymentAuthenticationBannerView.buttonTapped), for: .touchUpInside)
         button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .bold)
         
         stackView.translatesAutoresizingMaskIntoConstraints = false

@@ -9,7 +9,7 @@
     <objects>
         <placeholder placeholderIdentifier="IBFilesOwner" id="-1" userLabel="File's Owner" customClass="DownloadsTableViewController" customModule="Sileo" customModuleProvider="target">
             <connections>
-                <outlet property="cancelButton" destination="KuX-Le-H3l" id="16m-ge-uUj"/>
+                <outlet property="clearButton" destination="KuX-Le-H3l" id="16m-ge-uUj"/>
                 <outlet property="cancelDownload" destination="vkZ-XZ-mTv" id="LG2-5y-ubq"/>
                 <outlet property="completeButton" destination="bek-1B-uNa" id="65b-3u-4Oe"/>
                 <outlet property="completeLaterButton" destination="1Gm-L4-zfQ" id="29l-Cs-D6b"/>

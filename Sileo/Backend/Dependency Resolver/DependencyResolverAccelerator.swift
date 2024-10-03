@@ -21,7 +21,7 @@ class DependencyResolverAccelerator {
         
         init(package: Package) {
             self.version = package.version
-            self.package = package.packageID
+            self.package = package.package
             self.data = package.rawData ?? Data()
         }
 
@@ -35,6 +35,7 @@ class DependencyResolverAccelerator {
     private var toBePreflighted: [URL: Set<PreflightedPackage>] = [:]
     
     public func preflightInstalled() {
+        NSLog("SileoLog: DependencyResolverAccelerator.preflightInstalled()")
         if Thread.isMainThread {
             fatalError("Don't call things that will block the UI from the main thread")
         }
@@ -67,6 +68,7 @@ class DependencyResolverAccelerator {
     }
     
     public func removeRepo(repo: Repo) {
+        NSLog("SileoLog: DependencyResolverAccelerator.removeRepo(\(repo.url)")
         if !repo.archAvailabile {
             return
         }
@@ -82,7 +84,7 @@ class DependencyResolverAccelerator {
     }
     
     public func getDependencies(packages: [Package]) throws {
-        NSLog("SileoLog: getDependencies1")
+        NSLog("SileoLog: DependencyResolverAccelerator.getDependencies(\(packages.map({ $0.package }))")
         if Thread.isMainThread {
             fatalError("Don't call things that will block the UI from the main thread")
         }
@@ -147,6 +149,14 @@ class DependencyResolverAccelerator {
             toBePreflighted[sourceFileURL] = Set<PreflightedPackage>()
         }
         toBePreflighted[sourceFileURL]?.insert(PreflightedPackage(package: package))
+        
+        //also resolve the installed package itself
+        //,but this doesn't make sense due the package is in an inconsistent state and dpkg cannot uninstall it
+//        for repo in RepoManager.shared.repoList {
+//            if let thePackage = repo.packageDict[package.package] {
+//                getDependenciesInternal(package: thePackage)
+//            }
+//        }
   
         // Depends, Pre-Depends, Recommends, Suggests, Breaks, Conflicts, Provides, Replaces, Enhance
         let packageKeys = ["depends", "pre-depends", "conflicts", "replaces", "recommends", "provides", "breaks"]

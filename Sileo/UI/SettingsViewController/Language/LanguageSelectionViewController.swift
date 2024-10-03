@@ -52,12 +52,14 @@ class LanguageSelectionViewController: BaseSettingsViewController, LanguageSelec
                 UserDefaults.standard.setValue(selectedLanguage, forKey: "SelectedLanguage")
             }
             UserDefaults.standard.synchronize()
-            guard let window = UIApplication.shared.windows.first else { exit(0) }
+//            guard let window = UIApplication.shared.windows.first else { exit(0) }
             self.isFired = true
             self.setNeedsStatusBarAppearanceUpdate()
             let animator = UIViewPropertyAnimator(duration: 0.3, dampingRatio: 1) {
-                window.alpha = 0
-                window.transform = .init(scaleX: 0.9, y: 0.9)
+                for window in UIApplication.shared.windows {
+                    window.alpha = 0
+                    window.transform = .init(scaleX: 0.9, y: 0.9)
+                }
             }
             animator.addCompletion { _ in
                 exit(0)

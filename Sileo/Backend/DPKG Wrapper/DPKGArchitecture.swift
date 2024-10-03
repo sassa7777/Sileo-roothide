@@ -12,6 +12,9 @@ import Foundation
 struct DPKGArchitecture {
     
     enum Architecture: String, Decodable {
+        //don't remove anyone, support json parser for  Canister
+        case all = "all"
+        case any = "any"
         case rootful = "iphoneos-arm"
         case rootless = "iphoneos-arm64"
         case roothide = "iphoneos-arm64e"

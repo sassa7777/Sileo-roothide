@@ -24,7 +24,6 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
     var separatorView: UIView?
     var separatorHeightConstraint: NSLayoutConstraint?
     
-    var isUpdatingPurchaseStatus: Bool = false
     var icon: String?
     var packageObject: Package?
     
@@ -83,11 +82,9 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
         titleStackView.axis = .vertical
         titleStackView.setCustomSpacing(4, after: authorLabel)
         
-        packageButton.shouldCheckPurchaseStatus = true
         if let buttonText = dictionary["buttonText"] as? String {
             packageButton.overrideTitle = buttonText
         }
-        packageButton.dataProvider = self
         packageButton.viewControllerForPresentation = viewController
         packageButton.setContentHuggingPriority(.required, for: .horizontal)
         
@@ -226,7 +223,7 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
     }
     
     @objc public func reloadPackage() {
-        let package: Package? = {
+        self.packageObject = {
             if let holder = PackageListManager.shared.newestPackage(identifier: self.package, repoContext: nil) {
                 return holder
             } else if let provisional = CanisterResolver.shared.package(for: self.package) {
@@ -235,51 +232,40 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
             return nil
         }()
         
-        if let package = package {
+        if let package = self.packageObject {
             self.versionLabel.text = String(format: "%@ · %@", package.version, self.repoName)
             self.packageButton.package = package
             self.packageButton.isEnabled = true
-            self.packageObject = package
         } else {
             self.versionLabel.text = String(localizationKey: "Package_Unavailable")
             self.packageButton.package = nil
             self.packageButton.isEnabled = false
         }
+        
+        updatePaymentInfo()
     }
     
-    @objc public func updatePurchaseStatus() {
-        if isUpdatingPurchaseStatus {
+    private func updatePaymentInfo()
+    {
+        guard let package = self.packageObject, package.commercial, let repo = package.sourceRepo else {
+            self.packageButton.paymentInfo = nil
             return
         }
         
-        guard let package = PackageListManager.shared.newestPackage(identifier: self.package, repoContext: nil) else {
-            return
-        }
-        isUpdatingPurchaseStatus = true
-            
-        guard let repo = package.sourceRepo else {
-            return
-        }
+        self.packageButton.paymentInfo = PaymentPackageInfo(price: String(localizationKey: "Package_Paid"), purchased: false, available: true)
         
         PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
-            if error != nil {
-                let info = PaymentPackageInfo(price: String(localizationKey: "Package_Paid"), purchased: false, available: true)
-                DispatchQueue.main.async {
-                    self.isUpdatingPurchaseStatus = false
-                    self.packageButton.paymentInfo = info
+                guard error == nil, let provider = provider else {
+                    return
                 }
-            }
-            provider?.getPackageInfo(forIdentifier: self.package) { error, info in
-                var info = info
-                if error != nil {
-                    info = PaymentPackageInfo(price: String(localizationKey: "Package_Paid"), purchased: false, available: true)
-                }
-                DispatchQueue.main.async {
-                    self.isUpdatingPurchaseStatus = false
-                    if let info = info {
-                        self.packageButton.paymentInfo = info
-                    }
-                }
+// we can always request price for packages even if the repo is not logged in
+//                guard provider.isAuthenticated else {
+//                    return //we have to re-verify its payment status if the repo is not logged in
+//                }
+
+            provider.getPackageInfo(forIdentifier: package.package) { error, info in
+                guard error == nil, let info=info, info.available else { return }
+                self.packageButton.paymentInfo = info
             }
         }
     }
@@ -287,7 +273,7 @@ class FeaturedPackageView: FeaturedBaseView, PackageQueueButtonDataProvider {
 
 extension FeaturedPackageView: UIViewControllerPreviewingDelegate {
     func previewingContext(_ previewingContext: UIViewControllerPreviewing, viewControllerForLocation location: CGPoint) -> UIViewController? {
-        if let package = PackageListManager.shared.newestPackage(identifier: self.package, repoContext: nil) {
+        if let package = self.packageObject {
             return NativePackageViewController.viewController(for: package)
         }
         return nil
@@ -301,7 +287,7 @@ extension FeaturedPackageView: UIViewControllerPreviewingDelegate {
 @available(iOS 13.0, *)
 extension FeaturedPackageView: UIContextMenuInteractionDelegate {
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration? {
-        if let package = PackageListManager.shared.newestPackage(identifier: self.package, repoContext: nil) {
+        if let package = self.packageObject {
             let packageViewController = NativePackageViewController.viewController(for: package)
             
             let actions = packageViewController.actions()

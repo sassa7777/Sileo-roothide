@@ -16,9 +16,11 @@ class SettingsSwitchTableViewCell: UITableViewCell {
     var viewControllerForPresentation: UIViewController?
     var fallback = false
     
-    var defaultKey: String? {
-        didSet {
-            if let key = defaultKey { control.isOn = UserDefaults.standard.bool(forKey: key, fallback: fallback) }
+    var defaultKey: String?
+    
+    public func sync() {
+        if let key = defaultKey {
+            control.isOn = UserDefaults.standard.bool(forKey: key, fallback: fallback)
         }
     }
     

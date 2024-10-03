@@ -18,7 +18,17 @@ import BackgroundTasks
 class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDelegate {
     public var window: UIWindow?
     
+    func application(_ application: UIApplication, willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        NSLog("SileoLog: willFinishLaunchingWithOptions")
+        return true
+    }
+    
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        NSLog("SileoLog: applicationDidBecomeActive")
+    }
+    
     func applicationDidFinishLaunching(_ application: UIApplication) {
+        NSLog("SileoLog: applicationDidFinishLaunching")
 //uicache redirected
 //        EvanderNetworking.CACHE_FORCE = .libraryDirectory // Library/Cache -> /Library ?
 //        let prefix = CommandPath.prefix
@@ -218,6 +228,12 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
         self.window?.tintColor = tintColor
     }
     
+    private func aptEncoded(string: String) -> String {
+        var encodedString = string.replacingOccurrences(of: "_", with: "%5f")
+        encodedString = encodedString.replacingOccurrences(of: ":", with: "%3a")
+        return encodedString
+    }
+    
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         NSLog("SileoLog: openurl=\(url) options=\(options)")
         if let vc=self.window?.rootViewController?.presentedViewController {
@@ -233,16 +249,18 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                 if url.scheme == "file" {
                     if url.pathExtension == "deb" {
                         // The file is a deb. Open the package view controller to that file.
-                        var fileurl = url
-                        if options[UIApplication.OpenURLOptionsKey.openInPlace] as! Bool {
-                            let tmpdir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID.init().uuidString)
-                            let newurl = tmpdir.appendingPathComponent(url.lastPathComponent)
-                            try! FileManager.default.createDirectory(at: tmpdir, withIntermediateDirectories: false)
-                            try! FileManager.default.copyItem(at: url, to: newurl)
-                            NSLog("SileoLog: newurl=\(newurl)")
-                            fileurl = newurl
+                        
+                        let tmpdir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID.init().uuidString)
+                        let newurl = tmpdir.appendingPathComponent(self.aptEncoded(string: url.lastPathComponent))
+                        try! FileManager.default.createDirectory(at: tmpdir, withIntermediateDirectories: false)
+                        try! FileManager.default.copyItem(at: url, to: newurl)
+                        NSLog("SileoLog: newurl=\(newurl)")
+                        
+                        if options[UIApplication.OpenURLOptionsKey.openInPlace] as! Bool == false {
+                            try! FileManager.default.removeItem(at: url)
                         }
-                        guard let package = PackageListManager.shared.package(url: fileurl) else {
+                        
+                        guard let package = PackageListManager.shared.package(url: newurl) else {
                             let alert = UIAlertController(title: "Bad Deb", message: "The provided deb file could not be read", preferredStyle: .alert)
                             alert.addAction(UIAlertAction(title: "Ok", style: .cancel))
                             self.window?.rootViewController?.present(alert, animated: true, completion: nil)
@@ -310,9 +328,11 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
                 PackageListManager.shared.upgradeAll(completion: {
                     if UserDefaults.standard.bool(forKey: "AutoConfirmUpgradeAllShortcut", fallback: false) {
                         let downloadMan = DownloadManager.shared
-                        downloadMan.reloadData(recheckPackages: false)
+// already reloadData(recheckPackages: true) in PackageListManager.shared.upgradeAll
+//                        downloadMan.reloadData(recheckPackages: false)
+                        downloadMan.viewController.confirmQueued(self)
                     }
-                    
+                    //ignore UpgradeAllAutoQueue, always Show Queue on Upgrade All Shortcut
                     tabBarController.presentPopupController()
                     alert.dismiss(animated: true, completion: nil)
                 })
@@ -337,6 +357,7 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
     }
     
     func applicationWillEnterForeground(_ application: UIApplication) {
+        NSLog("SileoLog: applicationWillEnterForeground")
         UIColor.isTransitionLockedForiOS13Bug = false
     }
     

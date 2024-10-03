@@ -28,6 +28,9 @@ class SourcesTableViewCell: BaseSubtitleTableViewCell {
                 self.progress = 0
                 installedLabel.text = "\(PackageListManager.shared.installedPackages.count)"
             }
+            
+//            textLabel?.semanticContentAttribute = .forceLeftToRight
+//            detailTextLabel?.semanticContentAttribute = .forceLeftToRight
         }
     }
     public var installedLabel = UILabel()
@@ -35,7 +38,8 @@ class SourcesTableViewCell: BaseSubtitleTableViewCell {
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         
-        accessoryView = UIImageView(image: UIImage(named: "Chevron"))
+//        accessoryView = UIImageView(image: UIImage(named: "Chevron"))
+        self.accessoryType = .disclosureIndicator
         
         contentView.addSubview(installedLabel)
         installedLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -43,10 +47,58 @@ class SourcesTableViewCell: BaseSubtitleTableViewCell {
         installedLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor).isActive = true
         installedLabel.font = UIFont.systemFont(ofSize: 12)
         installedLabel.textColor = UIColor(red: 145.0/255.0, green: 155.0/255.0, blue: 162.0/255.0, alpha: 1)
+        
+        installedLabel.addObserver(self, forKeyPath: "bounds", options: [.new, .old], context: nil)
+    }
+    
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+
+//        NSLog("SileoLog: observeValue \(keyPath) \(change?[.newKey]) \(change?[.oldKey])")
+        if keyPath == "bounds", let newBounds = change?[.newKey] as? CGRect {
+            updateContentLayout(installedSize: newBounds.size)
+        }
     }
     
     required public init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    override open func layoutSubviews() {
+        super.layoutSubviews()
+        
+        updateContentLayout(installedSize: installedLabel.frame.size)
+    }
+    
+    private func updateContentLayout(installedSize: CGSize)
+    {
+        guard var textLabelFrame = self.textLabel?.frame,
+            var detailTextLabelFrame = self.detailTextLabel?.frame else {
+                return
+        }
+        
+        let fix = installedLabel.bounds.size.width + 7.5 + 5
+//        NSLog("SileoLog: updateContentLayout \(fix) \(installedSize)")
+        if UIView.userInterfaceLayoutDirection(for: self.semanticContentAttribute) == .leftToRight {
+            textLabelFrame.size.width = contentView.frame.size.width - textLabelFrame.origin.x  - fix
+            detailTextLabelFrame.size.width = contentView.frame.size.width - detailTextLabelFrame.origin.x  - fix
+        } else {
+            let fix2 = contentView.frame.size.width - (textLabelFrame.origin.x+textLabelFrame.size.width)
+            let textLableWidthMax = contentView.frame.size.width - fix2 - fix
+            if textLabelFrame.size.width > textLableWidthMax {
+                textLabelFrame.size.width = textLableWidthMax
+                textLabelFrame.origin.x = fix
+            }
+            
+            let fix3 = contentView.frame.size.width - (detailTextLabelFrame.origin.x+detailTextLabelFrame.size.width)
+            let detailTextLableWidthMax = contentView.frame.size.width - fix2 - fix
+            if detailTextLabelFrame.size.width > detailTextLableWidthMax {
+                detailTextLabelFrame.size.width = detailTextLableWidthMax
+                detailTextLabelFrame.origin.x = fix
+            }
+        }
+
+        self.textLabel?.frame = textLabelFrame
+        self.detailTextLabel?.frame = detailTextLabelFrame
     }
     
     override func prepareForReuse() {

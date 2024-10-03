@@ -15,9 +15,15 @@ var searchHistory: [String] {
     get {
         return UserDefaults.standard.stringArray(forKey: "UserSearchHistory") ?? []
     }
-    
+
     set {
-        UserDefaults.standard.set(Array(Set(newValue)), forKey: "UserSearchHistory")
+        var newItems: [String] = []
+        for item in newValue {
+            if !newItems.contains(item) {
+                newItems.append(item)
+            }
+        }
+        UserDefaults.standard.set(newItems, forKey: "UserSearchHistory")
     }
 }
 
@@ -44,6 +50,8 @@ class PackageListViewController: SileoScrollViewController, UIGestureRecognizerD
     final private var searchCache: [String: [Package]] = [:]
     final private var provisionalPackages: [ProvisionalPackage] = []
     final private var cachedInstalled: [Package]?
+    
+    private var prevSearchText:String?
     
     public var refreshPackages = UIRefreshControl()
     
@@ -90,7 +98,7 @@ class PackageListViewController: SileoScrollViewController, UIGestureRecognizerD
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         self.navigationController?.navigationBar._hidesShadow = true
-        
+                
         guard #available(iOS 13, *) else {
             if showSearchField {
                 self.navigationItem.hidesSearchBarWhenScrolling = false
@@ -233,7 +241,7 @@ class PackageListViewController: SileoScrollViewController, UIGestureRecognizerD
             let packageMan = PackageListManager.shared
             
             if !self.showSearchField {
-                let pkgs = packageMan.packageList(identifier: self.packagesLoadIdentifier, sortPackages: true, repoContext: self.repoContext)
+                let pkgs = packageMan.packageList(identifier: self.packagesLoadIdentifier, sortPackages: true, repoContext: self.repoContext, packagePrepend: self.packagesLoadIdentifier=="--contextInstalled" ? (self.repoContext?.installed ?? []) : nil)
                 self.packages = pkgs
                 self.searchCache[""] = pkgs
                 if let controller = self.searchController {
@@ -267,7 +275,7 @@ class PackageListViewController: SileoScrollViewController, UIGestureRecognizerD
     }
     
     func controller(package: Package) -> PackageActions {
-        NSLog("SileoLog: NativePackageViewController=\(package), \(package.sourceRepo)")
+        NSLog("SileoLog: NativePackageViewController=\(package.package), \(package.sourceRepo?.url), \(package.source)")
         return NativePackageViewController.viewController(for: package)
     }
     
@@ -365,12 +373,10 @@ class PackageListViewController: SileoScrollViewController, UIGestureRecognizerD
         var bodyFromArray = ""
         let packages = self.packages
         for package in packages {
-            guard let packageName = package.name else {
-                continue
-            }
+            let packageName = package.name
             let packageVersion = package.version
             
-            bodyFromArray += "\(packageName):(\(package.packageID)) \(packageVersion)\n"
+            bodyFromArray += "\(packageName):(\(package.package)) \(packageVersion)\n"
         }
         
         if let subRange = Range<String.Index>(NSRange(location: bodyFromArray.count - 1, length: 1), in: bodyFromArray) {
@@ -637,6 +643,12 @@ extension PackageListViewController: UICollectionViewDelegate {
         collectionView.deselectItem(at: indexPath, animated: true)
         guard let pvc = self.controller(indexPath: indexPath) else { return }
         self.navigationController?.pushViewController(pvc, animated: true)
+        
+        guard UserDefaults.standard.bool(forKey: "ShowSearchHistory", fallback: true) else { return }
+        guard navigationItem.title == String(localizationKey: "Search_Page") else { return }
+        if let text = searchController?.searchBar.text, !text.isEmpty {
+            searchHistory.insert(text, at: 0)
+        }
     }
 }
 
@@ -723,12 +735,14 @@ extension PackageListViewController {
 extension PackageListViewController: UISearchBarDelegate {
     
     func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
+        NSLog("SileoLog: searchBarCancelButtonClicked \(searchBar)")
         self.provisionalPackages.removeAll()
         self.packages.removeAll()
         self.collectionView?.reloadData()
     }
     
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        NSLog("SileoLog: searchBarSearchButtonClicked \(searchBar)")
         guard let text = searchBar.text,
               !text.isEmpty,
               showProvisional,
@@ -738,7 +752,7 @@ extension PackageListViewController: UISearchBarDelegate {
         }
         
         if UserDefaults.standard.bool(forKey: "ShowSearchHistory", fallback: true) {
-            searchHistory.append(text)
+            searchHistory.insert(text, at: 0)
         }
         
         CanisterResolver.shared.fetch(text) { change in
@@ -763,14 +777,14 @@ extension PackageListViewController: UISearchBarDelegate {
        
        let text = (searchController?.searchBar.text ?? "").lowercased()
        let oldEmpty = provisionalPackages.isEmpty
-       if text.count < 3 {
+       if text.lengthOfBytes(using: String.Encoding.utf8) <= 2 {
            self.provisionalPackages.removeAll()
            return oldEmpty ? .nothing : .delete
        }
        
-       let all = packages
-       self.provisionalPackages = CanisterResolver.shared.packages.filter {(package: ProvisionalPackage) -> Bool in
-           let searchTerms = [package.name, package.package, package.description, package.author?.name].compactMap { $0?.lowercased() }
+       var newPackages: [Package] = []
+       self.provisionalPackages = CanisterResolver.shared.packages.filter {(pro: ProvisionalPackage) -> Bool in
+           let searchTerms = [pro.name, pro.package, pro.description, pro.author?.name].compactMap { $0?.lowercased() }
            var contains = false
            for term in searchTerms {
                if strstr(term, text) != nil {
@@ -780,10 +794,31 @@ extension PackageListViewController: UISearchBarDelegate {
            }
            if !contains { return false }
            
-           if let existingPackage = all.first(where: { $0.packageID == package.package }) {
-               return DpkgWrapper.isVersion(package.version, greaterThan: existingPackage.version)
+           let existingRepo = RepoManager.shared.repo(with: pro.repository.uri, suite: pro.repository.suite, components: pro.repository.component?.components(separatedBy: .whitespaces))
+
+           if let existingRepoPackage = self.packages.first(where: {$0.package==pro.package && $0.sourceRepo==existingRepo}) {
+//               return !DpkgWrapper.isVersion(existingRepoPackage.version, greaterThan: pro.version)
+               NSLog("SileoLog: existingPackage=\(existingRepoPackage.package)")
+               return false
            }
+           else if let bestPackage = PackageListManager.shared.newestPackage(identifier: pro.package) {
+               if !self.packages.contains(bestPackage) {
+                   NSLog("SileoLog: newPackages.append(\(bestPackage.package))")
+                   newPackages.append(bestPackage)
+               }
+           }
+           
+           //if the repo has already been added then we should skip this ProvisionalPackage anyway
+           if existingRepo != nil {
+               return false
+           }
+           
            return true
+       }
+       if newPackages.count > 0 {
+           self.packages.append(contentsOf: newPackages)
+           self.collectionView?.reloadData()
+           return .nothing
        }
        if oldEmpty && provisionalPackages.isEmpty {
            return .nothing
@@ -798,8 +833,8 @@ extension PackageListViewController: UISearchBarDelegate {
 }
 
 extension PackageListViewController: UISearchResultsUpdating {
-    
     func updateSearchResults(for searchController: UISearchController) {
+        NSLog("SileoLog: updateSearchResults \(searchController)")
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
                 self?.updateSearchResults(for: searchController)
@@ -817,6 +852,12 @@ extension PackageListViewController: UISearchResultsUpdating {
         
         let searchBar = searchController.searchBar
         self.canisterHeartbeat?.invalidate()
+        
+        if (searchBar.text?.isEmpty ?? true) != (self.prevSearchText?.isEmpty ?? true) {
+            NSLog("SileoLog: self.collectionView.scrollRectToVisible")
+            self.collectionView?.scrollRectToVisible(CGRectMake(0,0,1,1), animated: false)
+        }
+        self.prevSearchText = searchBar.text
     
         if searchBar.text?.isEmpty ?? true {
             if showSearchField {
@@ -851,9 +892,8 @@ extension PackageListViewController: UISearchResultsUpdating {
             if let cachedPackages = self.searchCache[query.lowercased()] {
                 packages = cachedPackages
             } else if self.packagesLoadIdentifier == "--contextInstalled" {
-                guard let context = self.repoContext,
-                      let url = context.url else { return }
-                let betterContext = RepoManager.shared.repo(with: url) ?? context
+                guard let context = self.repoContext else { return }
+                let betterContext = RepoManager.shared.repo(with: context) ?? context
                 packages = packageManager.packageList(identifier: self.packagesLoadIdentifier,
                                                       search: query,
                                                       sortPackages: true,
@@ -874,8 +914,8 @@ extension PackageListViewController: UISearchResultsUpdating {
                 switch SortMode() {
                 case .installdate:
                     packages = packages.sorted(by: { package1, package2 -> Bool in
-                        guard let date1 = package1.installDate,
-                              let date2 = package2.installDate else { return true }
+                        guard let date1 = package1.installDate else { return true }
+                        guard let date2 = package2.installDate else { return false }
                         return date2.compare(date1) == .orderedAscending
                     })
                 case .size:
@@ -889,6 +929,10 @@ extension PackageListViewController: UISearchResultsUpdating {
             if self.updatingCount != 0 {
                 return
             }
+            
+//Truncating arrays before transferring it to the main queue when searching to prevent UI lag
+            packages = Array(packages.prefix(1000))
+//
             DispatchQueue.main.async {
                 self.packages = packages
                 self.updateProvisional()

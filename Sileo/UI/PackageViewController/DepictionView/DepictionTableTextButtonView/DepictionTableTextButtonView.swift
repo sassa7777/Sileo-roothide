@@ -1,5 +1,5 @@
 //
-//  DepictionTableButtonView.swift
+//  DepictionTableTextButtonView.swift
 //  Sileo
 //
 //  Created by CoolStar on 7/6/19.
@@ -9,23 +9,23 @@
 import Foundation
 import Evander
 
-class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
+class DepictionTableTextButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
     private var selectionView: UIView
     private var titleLabel: UILabel
+    private var textLabel: UILabel
     private var chevronView: UIImageView
     private var repoIcon: UIImageView?
 
     private var action: String
     private var context: Any?
-    private var backupAction: String
-
-    private let openExternal: Bool
 
     required init?(dictionary: [String: Any], viewController: UIViewController, tintColor: UIColor, isActionable: Bool) {
         guard let title = dictionary["title"] as? String else {
             return nil
         }
-
+        guard let text = dictionary["text"] as? String else {
+            return nil
+        }
         guard let action = dictionary["action"] as? String else {
             return nil
         }
@@ -34,63 +34,35 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
 
         selectionView = UIView(frame: .zero)
         titleLabel = UILabel(frame: .zero)
+        textLabel = UILabel(frame: .zero)
         chevronView = UIImageView(image: UIImage(named: "Chevron")?.withRenderingMode(.alwaysTemplate))
 
         self.action = action
-        backupAction = (dictionary["backupAction"] as? String) ?? ""
-
-        openExternal = (dictionary["openExternal"] as? Bool) ?? false
 
         super.init(dictionary: dictionary, viewController: viewController, tintColor: tintColor, isActionable: isActionable)
-        
-        if let repo = dictionary["_repo"] as? String {
-            repoIcon = UIImageView(frame: .zero)
-            repoIcon?.layer.masksToBounds = true
-            repoIcon?.layer.cornerRadius = 7.5
-            loadRepoImage(repo)
-            self.addSubview(repoIcon!)
-        }
         
         titleLabel.text = title
         titleLabel.textAlignment = .left
         titleLabel.font = UIFont.systemFont(ofSize: 17)
+        titleLabel.lineBreakMode = .byTruncatingMiddle
         self.addSubview(titleLabel)
+        
+        textLabel.text = text
+        textLabel.textAlignment = .right
+        textLabel.font = UIFont.systemFont(ofSize: 17)
+        textLabel.lineBreakMode = .byTruncatingMiddle
+        textLabel.textColor = UIColor(white: 175.0/255.0, alpha: 1)
+        self.addSubview(textLabel)
 
         self.addSubview(chevronView)
         
-        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(DepictionTableButtonView.buttonTapped))
+        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(DepictionTableTextButtonView.buttonTapped))
         tapGestureRecognizer.delegate = self
         self.addGestureRecognizer(tapGestureRecognizer)
 
         self.accessibilityTraits = .link
         self.isAccessibilityElement = true
         self.accessibilityLabel = titleLabel.text
-    }
-    
-    private func loadRepoImage(_ repo: String) {
-        guard let url = URL(string: repo) else { return }
-        if url.host == "apt.thebigboss.org" {
-            let url = StoreURL("deprecatedicons/BigBoss@\(Int(UIScreen.main.scale))x.png")!
-            let cache = EvanderNetworking.imageCache(url, scale: UIScreen.main.scale)
-            if let image = cache.1 {
-                repoIcon?.image = image
-            }
-            return
-        }
-        let scale = Int(UIScreen.main.scale)
-        for i in (1...scale).reversed() {
-            let filename = i == 1 ? CommandPath.RepoIcon : "\(CommandPath.RepoIcon)@\(i)x"
-            if let iconURL = URL(string: repo)?
-                .appendingPathComponent(filename)
-                .appendingPathExtension("png") {
-                let cache = EvanderNetworking.imageCache(iconURL, scale: CGFloat(i))
-                if let image = cache.1 {
-                    repoIcon?.image = image
-                    return
-                }
-            }
-        }
-        repoIcon?.image = UIImage(named: "Repo Icon")
     }
     
     required public init?(coder aDecoder: NSCoder) {
@@ -112,12 +84,11 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
         containerFrame.size.width -= 32
 
         selectionView.frame = self.bounds
-        if let repoIcon = repoIcon {
-            repoIcon.frame = CGRect(x: containerFrame.minX, y: 4.5, width: 35, height: 35)
-            titleLabel.frame = CGRect(x: containerFrame.minX + 40, y: 12, width: containerFrame.width - 60, height: 20.0)
-        } else {
-            titleLabel.frame = CGRect(x: containerFrame.minX, y: 12, width: containerFrame.width - 20, height: 20.0)
-        }
+        
+        titleLabel.frame = CGRect(x: containerFrame.minX, y: 12, width: containerFrame.width - 20 - 10, height: 20.0)
+        
+        textLabel.frame = CGRect(x: containerFrame.minX + 10, y: 12, width: containerFrame.width - 20 - 10, height: 20)
+        
         chevronView.frame = CGRect(x: containerFrame.maxX - 9, y: 15, width: 7, height: 13)
     }
 
@@ -139,15 +110,13 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
             }
         }
 
-        if !self.processAction(action) {
-            self.processAction(backupAction)
-        }
+        self.processAction(action)
     }
 
     @discardableResult func processAction(_ action: String) -> Bool {
         if action.isEmpty {
             return false
         }
-        return DepictionButton.processAction(action, parentViewController: self.parentViewController, openExternal: openExternal, context: context)
+        return DepictionButton.processAction(action, parentViewController: self.parentViewController, openExternal: false, context: context)
     }
 }

@@ -35,8 +35,8 @@ class DepictionButton: UIButton {
         }
     }
     
-    static func processAction(_ action: String, parentViewController: UIViewController?, openExternal: Bool) -> Bool {
-        if action.hasPrefix("http"),
+    static func processAction(_ action: String, parentViewController: UIViewController?, openExternal: Bool, context: Any?=nil) -> Bool {
+        if action.lowercased().hasPrefix("http://") || action.lowercased().hasPrefix("https://"),
             let url = URL(string: action) {
             if openExternal {
                 UIApplication.shared.open(url, options: [:], completionHandler: nil)
@@ -45,7 +45,7 @@ class DepictionButton: UIButton {
                 safariViewController.preferredControlTintColor = UINavigationBar.appearance().tintColor
                 parentViewController?.present(safariViewController, animated: true, completion: nil)
             }
-        } else if action.hasPrefix("mailto"),
+        } else if action.lowercased().hasPrefix("mailto:"),
             let url = URL(string: action) {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         } else if action == "showInstalledContents" {
@@ -58,7 +58,7 @@ class DepictionButton: UIButton {
             }
         } else if action == "showRepoContext" {
             if let packageViewController = parentViewController as? PackageViewController,
-               let repo = packageViewController.package?.sourceRepo {
+               let repo = context as? Repo {
                 if let navController = packageViewController.navigationController as? SileoNavigationController {
                     for viewController in navController.viewControllers {
                         if viewController.isKind(of: CategoryViewController.self) {
@@ -74,6 +74,13 @@ class DepictionButton: UIButton {
                 categoryVC.repoContext = repo
                 categoryVC.title = repo.repoName
                 parentViewController?.navigationController?.pushViewController(categoryVC, animated: true)
+                return true
+            }
+        } else if action == "showPackage" {
+            if let packageViewController = parentViewController as? PackageViewController,
+               let package = context as? Package {
+                let packageVC = NativePackageViewController.viewController(for: package)
+                parentViewController?.navigationController?.pushViewController(packageVC, animated: true)
                 return true
             }
         } else if let url = URL(string: action) {

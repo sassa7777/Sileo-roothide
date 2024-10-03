@@ -9,24 +9,30 @@
 import Foundation
 
 extension UIPasteboard {
-    func sources() -> [URL] {
-        guard let string = self.string else {
+    func newSources() -> [String] {
+        
+        guard let string = self.string?.trimmingCharacters(in: .whitespaces),
+              string.count > 0 else {
             return []
         }
-        
-        // Split into discrete URLs separated by whitespace, remove empty strings
-        let possibleURLs = string.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-        
-        return possibleURLs.compactMap { URL(string: $0) }
-    }
-    
-    func newSources() -> [URL] {
-        self.sources().filter {
-            if $0.scheme == "https" || $0.scheme == "http" {
-                return !RepoManager.shared.hasRepo(with: $0)
-            } else {
+
+        return string.components(separatedBy: .newlines).filter { $0.isEmpty == false }.filter {
+            let parts = $0.components(separatedBy: .whitespaces)
+            
+            guard parts.count==1 || parts.count>=3 else {
                 return false
             }
+            
+            guard let url = URL(string: parts[0]) else { return false }
+            
+            let suite = (parts.count > 1) ? parts[1] : "./"
+            let components = (parts.count > 2) ? Array(parts[2...]) : nil
+            
+            guard ["http","https"].contains(url.scheme?.lowercased()) && url.host != nil else {
+                return false
+            }
+            
+            return !RepoManager.shared.hasRepo(with: url, suite: suite, components: components)
         }
     }
 }

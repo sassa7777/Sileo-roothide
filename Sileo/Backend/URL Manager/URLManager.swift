@@ -46,7 +46,7 @@ class URLManager {
         
         presentModally = false
         
-        if url.scheme == "http" || url.scheme == "https" {
+        if url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https" {
             presentModally = true
             let viewController = SFSafariViewController(url: url)
             viewController.preferredControlTintColor = UINavigationBar.appearance().tintColor
@@ -71,7 +71,7 @@ class URLManager {
                 var realURLStr = url.absoluteString
                 realURLStr.removeFirst(12)
                 if let realURL = URL(string: String(realURLStr)),
-                    realURL.scheme == "http" || realURL.scheme == "https" {
+                   realURL.scheme?.lowercased() == "http" || realURL.scheme?.lowercased() == "https" {
                     let viewController = SFSafariViewController(url: realURL)
                     viewController.preferredControlTintColor = UINavigationBar.appearance().tintColor
                     return viewController

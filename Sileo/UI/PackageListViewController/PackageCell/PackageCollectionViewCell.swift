@@ -31,11 +31,18 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
         super.init(coder: aDecoder)
     }
     
+    private var hasPurchased = false
     public var targetPackage: Package? {
         didSet {
             if let targetPackage = targetPackage {
                 titleLabel?.text = targetPackage.name
-                authorLabel?.text = "\(targetPackage.author?.name ?? "Unknown") • \(targetPackage.version)"
+                authorLabel?.text = "\(targetPackage.version)"
+                if let repoName = targetPackage.sourceRepo?.repoName, let text=authorLabel?.text {
+                    authorLabel?.text = "\(text) • \(repoName)"
+                }
+                if let authorName = targetPackage.author?.name, let text=authorLabel?.text {
+                    authorLabel?.text = "\(text) • \(authorName)"
+                }
                 descriptionLabel?.text = targetPackage.packageDescription
                 
                 let url = targetPackage.icon
@@ -49,14 +56,21 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
                                              self.titleLabel?.text ?? "", self.authorLabel?.text ?? "")
             
             self.refreshState()
+            self.checkPurchaseStatus()
         }
     }
     
     public var provisionalTarget: ProvisionalPackage? {
         didSet {
             if let provisionalTarget = provisionalTarget {
-                titleLabel?.text = provisionalTarget.name ?? ""
-                authorLabel?.text = "\(provisionalTarget.author?.name ?? "") • \(provisionalTarget.version)"
+                titleLabel?.text = provisionalTarget.name ?? provisionalTarget.package
+                authorLabel?.text = "\(provisionalTarget.version)"
+                if let text = authorLabel?.text, let repoName = provisionalTarget.repository.name {
+                    authorLabel?.text = "\(text) • \(repoName)"
+                }
+                if let text = authorLabel?.text, let authorName = provisionalTarget.author?.name {
+                    authorLabel?.text = "\(text) • \(authorName)"
+                }
                 descriptionLabel?.text = provisionalTarget.description
             
                 let url = provisionalTarget.icon
@@ -71,6 +85,12 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
             
             self.refreshState()
         }
+    }
+    
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        
+        self.hasPurchased = false
     }
     
     override func awakeFromNib() {
@@ -165,22 +185,28 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
 
 extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
     func collectionView(_ collectionView: UICollectionView, editActionsForItemAt indexPath: IndexPath, for orientation: SwipeActionsOrientation) -> [SwipeAction]? {
+        guard UserDefaults.standard.bool(forKey: "SwipeActions", fallback: true)  else { return nil }
+        
+        let RTL = UIView.userInterfaceLayoutDirection(for: self.semanticContentAttribute) == .rightToLeft
         // Different actions depending on where we are headed
         // Also making sure that the set package actually exists
         if let provisionalPackage = provisionalTarget {
             let repo = provisionalPackage.repository
-            guard orientation == .right else { return nil }
-            if !RepoManager.shared.hasRepo(with: repo.uri) {
+            guard orientation == (RTL ? .left : .right) else { return nil }
+            if !RepoManager.shared.hasRepo(with: repo.uri, suite: repo.suite, components: repo.component?.components(separatedBy: .whitespaces)) {
                 return [addRepo(provisionalPackage)]
+            } else {
+                return []
             }
             return nil
         }
-        guard let package = targetPackage,
-              UserDefaults.standard.bool(forKey: "SwipeActions", fallback: true)  else { return nil }
+        
+        guard let package = targetPackage else { return nil }
+        
         var actions = [SwipeAction]()
         let queueFound = DownloadManager.shared.find(package: package)
         // We only want delete if we're going left, and only if it's in the queue
-        if orientation == .left {
+        if orientation == (RTL ? .right : .left) {
             if queueFound != .none {
                 actions.append(cancelAction(package))
             }
@@ -228,6 +254,12 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
                     tabBarController.selectedViewController = sourcesSVC
                     if let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
                         sourcesVC.presentAddSourceEntryField(url: package.repository.uri)
+                        let source = package.repository
+                        if source.suite == "./" {
+                            sourcesVC.presentAddSourceEntryField(url: source.uri)
+                        } else {
+                            sourcesVC.addDistRepo(string: source.uri.absoluteString, suites: source.suite, components: source.component)
+                        }
                     }
             }
             if let package = CanisterResolver.package(package) {
@@ -258,8 +290,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             if queueFound != .none {
                 DownloadManager.shared.remove(package: package.package)
             }
-            DownloadManager.shared.add(package: package, queue: .uninstallations)
-            DownloadManager.shared.reloadData(recheckPackages: true)
+            self.requestQueuePackage(package: package, queue: .uninstallations)
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
@@ -273,8 +304,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             if queueFound != .none {
                 DownloadManager.shared.remove(package: package.package)
             }
-            DownloadManager.shared.add(package: package, queue: .upgrades)
-            DownloadManager.shared.reloadData(recheckPackages: true)
+            self.requestQueuePackage(package: package, queue: .upgrades)
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
@@ -289,8 +319,7 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             if queueFound != .none {
                 DownloadManager.shared.remove(package: package.package)
             }
-            DownloadManager.shared.add(package: package, queue: .installations)
-            DownloadManager.shared.reloadData(recheckPackages: true)
+            self.requestQueuePackage(package: package, queue: .installations)
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
@@ -306,130 +335,155 @@ extension PackageCollectionViewCell: SwipeCollectionViewCellDelegate {
             if queueFound != .none {
                 DownloadManager.shared.remove(package: package.package)
             }
-            if package.sourceRepo != nil && !package.package.contains("/") {
-                if !package.commercial {
-                    DownloadManager.shared.add(package: package, queue: .installations)
-                    DownloadManager.shared.reloadData(recheckPackages: true)
-                } else {
-                    self.updatePurchaseStatus(package) { error, provider, purchased in
-                        guard let provider = provider else {
-                            return self.presentAlert(paymentError: .invalidResponse,
-                                                     title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title",
-                                                                   type: .error))
-                        }
-                        if let error = error {
-                            return self.presentAlert(paymentError: error,
-                                                     title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title",
-                                                                   type: .error))
-                        }
-                        if purchased {
-                            NSLog("SileoLog: SwipeAction add(package")
-                            DownloadManager.shared.add(package: package, queue: .installations)
-                            DownloadManager.shared.reloadData(recheckPackages: true)
-                        } else {
-                            if provider.isAuthenticated {
-                                self.initatePurchase(provider: provider, package: package)
-                            } else {
-                                DispatchQueue.main.async {
-                                    self.authenticate(provider: provider, package: package)
-                                }
-                            }
-                        }
-                    }
-                }
+            if package.sourceRepo != nil && package.local_deb==nil {
+                self.requestQueuePackage(package: package, queue: .installations)
             }
             self.hapticResponse()
             self.hideSwipe(animated: true)
         }
-        if package.commercial {
-            install.image = UIImage(systemNameOrNil: "dollarsign.circle")
-        } else {
+//It is not enough to determine whether the package has been purchased at this time.
+//        if package.commercial {
+//            install.image = UIImage(systemNameOrNil: "dollarsign.circle")
+//        } else {
             install.image = UIImage(systemNameOrNil: "square.and.arrow.down")
-        }
+//        }
         install.backgroundColor = .systemGreen
         return install
     }
+    
+    private func queuePackage(_ package: Package, _ queue: DownloadManagerQueue)
+    {
+        DownloadManager.shared.add(package: package, queue: queue)
+        DownloadManager.shared.reloadData(recheckPackages: true)
+    }
+    
+    private func checkPurchaseStatus()
+    {
+        self.hasPurchased = false
         
-    private func updatePurchaseStatus(_ package: Package, _ completion: ((PaymentError?, PaymentProvider?, Bool) -> Void)?) {
-        guard let repo = package.sourceRepo else {
-            return self.presentAlert(paymentError: .noPaymentProvider, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title",
-                                                                                     type: .error))
+        guard let package = targetPackage, package.commercial, let repo = package.sourceRepo else {
+            return
         }
+        
         PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
-            guard let provider = provider else {
-                if let completion = completion { completion(.noPaymentProvider, nil, false) }
+            guard error == nil, let provider = provider else {
                 return
             }
-            if error != nil { if let completion = completion { completion(error, provider, false) }; return }
+            
+            guard provider.isAuthenticated else {
+                return //we have to re-verify its payment status if the repo is not logged in
+            }
+
             provider.getPackageInfo(forIdentifier: package.package) { error, info in
-                guard let info = info else {
-                    if let completion = completion { completion(error, provider, false) }
-                    return
-                }
-                if error != nil {
-                    return
-                }
-                if info.purchased {
-//should add package in completion callback
-//                    NSLog("SileoLog: updatePurchaseStatus add(package: \(package)")
-//                    DownloadManager.shared.add(package: package, queue: .installations)
-//                    DownloadManager.shared.reloadData(recheckPackages: true)
-                    if let completion = completion {
-                        completion(nil, provider, true)
-                    }
+                guard error == nil, let info=info, info.available else { return }
+                self.hasPurchased = info.purchased
+            }
+        }
+    }
+    
+    private func requestQueuePackage(package: Package, queue: DownloadManagerQueue)
+    {
+        //local deb?
+        guard let repo = package.sourceRepo, package.commercial, !self.hasPurchased, queue != .uninstallations else {
+            return queuePackage(package, queue)
+        }
+        
+        PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
+            if let error = error {
+                self.presentAlert(paymentError: error, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title", type: .error))
+                return
+            }
+            guard let provider = provider else {
+                self.presentAlert(paymentError: .noPaymentProvider, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title", type: .error))
+                return
+            }
+
+            if !provider.isAuthenticated {
+                return self.authenticate(provider: provider, package: package, completion: {
+                    self.requestQueuePackage(package: package, queue: queue)
+                })
+            }
+            
+            self.updatePurchaseStatus(provider, package) { purchased in
+                if purchased {
+                    NSLog("SileoLog: updatePurchaseStatus add(package=\(package))")
+                    self.queuePackage(package, queue)
                 } else {
-                    if let completion = completion {
-                        completion(nil, provider, false)
-                    }
+                    self.initatePurchase(provider: provider, package: package, queue: queue)
                 }
             }
         }
     }
     
-    private func initatePurchase(provider: PaymentProvider, package: Package) {
+    private func updatePurchaseStatus(_ provider: PaymentProvider, _ package: Package, _ completion:@escaping ((Bool) -> Void)) {
+        provider.getPackageInfo(forIdentifier: package.package) { error, info in
+            if let error = error {
+                return self.presentAlert(paymentError: error, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title", type: .error))
+            }
+            guard let info = info else {
+                return self.presentAlert(paymentError: .invalidResponse, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title", type: .error))
+            }
+            if !info.available {
+                return self.presentAlert(paymentError: PaymentError(message: String(localizationKey: "Package_Unavailable")),
+                                  title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title", type: .error))
+            }
+            
+            return completion(info.purchased)
+        }
+    }
+    
+    private func initatePurchase(provider: PaymentProvider, package: Package, queue: DownloadManagerQueue) {
         provider.initiatePurchase(forPackageIdentifier: package.package) { error, status, actionURL in
-            if status == .cancel { return }
-            guard !(error?.shouldInvalidate ?? false) else {
-                return self.authenticate(provider: provider, package: package)
+            if let error = error {
+                if error.shouldInvalidate {
+                    self.authenticate(provider: provider, package: package, completion: {
+                        self.requestQueuePackage(package: package, queue: queue)
+                    })
+                    return
+                }
+                return self.presentAlert(paymentError: error, title: String(localizationKey: "Purchase_Initiate_Fail.Title", type: .error))
             }
-            if error != nil || status == .failed {
-                self.presentAlert(paymentError: error,
-                                  title: String(localizationKey: "Purchase_Initiate_Fail.Title",
-                                                type: .error))
+            if status == .immediateSuccess {
+                //it's necessary to check the purchase status again?
+                //return return self.requestQueuePackage(package: package, queue: queue)
+                return self.queuePackage(package, queue)
             }
-            guard let actionURL = actionURL,
-                status != .immediateSuccess else {
-                    return self.updatePurchaseStatus(package, nil)
-            }
-            DispatchQueue.main.async {
-                PaymentAuthenticator.shared.handlePayment(actionURL: actionURL, provider: provider, window: self.window) { error, success in
-                    if error != nil {
-                        let title = String(localizationKey: "Purchase_Complete_Fail.Title", type: .error)
-                        return self.presentAlert(paymentError: error, title: title)
-                    }
-                    if success {
-                        self.updatePurchaseStatus(package, nil)
+            else if status == .actionRequired {
+                DispatchQueue.main.async {
+                    PaymentAuthenticator.shared.handlePayment(actionURL: actionURL!, provider: provider, window: self.window) { error, success in
+                        if let error = error {
+                            let title = String(localizationKey: "Purchase_Complete_Fail.Title", type: .error)
+                            return self.presentAlert(paymentError: error, title: title)
+                        }
+                        if success {
+                            //it's necessary to check the purchase status again?
+                            //return return self.requestQueuePackage(package: package, queue: queue)
+                            return self.queuePackage(package, queue)
+                        }
                     }
                 }
             }
         }
     }
     
-    private func authenticate(provider: PaymentProvider, package: Package) {
-        PaymentAuthenticator.shared.authenticate(provider: provider, window: self.window) { error, success in
-            if error != nil {
-                return self.presentAlert(paymentError: error, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title",
-                                                                            type: .error))
-            }
-            if success {
-                self.updatePurchaseStatus(package, nil)
+    private func authenticate(provider: PaymentProvider, package: Package, completion:@escaping ()->Void) {
+        DispatchQueue.main.async {
+            PaymentAuthenticator.shared.authenticate(provider: provider, window: self.window) { error, success in
+                if let error = error {
+                    return self.presentAlert(paymentError: error, title: String(localizationKey: "Purchase_Auth_Complete_Fail.Title", type: .error))
+                }
+                if success {
+                    return completion()
+                }
             }
         }
     }
     
-    private func presentAlert(paymentError: PaymentError?, title: String) {
+    private func presentAlert(paymentError: PaymentError, title: String) {
+        NSLog("SileoLog: presentAlert \(title) \(paymentError)")
         DispatchQueue.main.async {
-            UIApplication.shared.windows.last?.rootViewController?.present(PaymentError.alert(for: paymentError,
+//            UIApplication.shared.windows.last?.rootViewController?.present(PaymentError.alert(for: paymentError,
+            UIApplication.shared.keyWindow?.rootViewController?.present(PaymentError.alert(for: paymentError,
                                                                                               title: title),
                                                                                               animated: true,
                                                                                               completion: nil)

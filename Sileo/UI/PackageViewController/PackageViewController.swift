@@ -60,8 +60,6 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
 
     private var allowNavbarUpdates = false
     private var currentNavBarOpacity = CGFloat(0)
-
-    private var isUpdatingPurchaseStatus = false
     
     private func parseNativeDepiction(_ data: Data, host: String, failureCallback: (() -> Void)?) {
         guard let rawJSON = try? JSONSerialization.jsonObject(with: data, options: []),
@@ -157,13 +155,10 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         
         self.navigationController?.navigationBar.isTranslucent = true
         
-        
         downloadButton.viewControllerForPresentation = self
-        downloadButton.dataProvider = self
         
         let navBarDownloadButton = PackageQueueButton()
         navBarDownloadButton.viewControllerForPresentation = self
-        navBarDownloadButton.dataProvider = self
         self.navBarDownloadButton = navBarDownloadButton
 
         let shareButton = UIButton(type: .custom)
@@ -218,6 +213,8 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         packageName.textColor = .sileoLabel
     }
     
+    private var savedProvisional: Package?
+    
     @objc func reloadData() {
         guard Thread.current.isMainThread else {
             DispatchQueue.main.async {
@@ -228,16 +225,25 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         
         depictionView?.removeFromSuperview()
         depictionView = nil
+        
+        if let package=package, let source=package.source, package.isProvisional ?? false {
+            if let repo = RepoManager.shared.repo(with: source.uri, suite: source.suite, components: source.component?.components(separatedBy: .whitespaces) )
+            {
+                if let newPackage = PackageListManager.shared.newestPackage(identifier: package.package, repoContext: repo) {
+                    self.savedProvisional = self.package
+                    self.package = newPackage
+                }
+            }
+        }
 
-        guard var package = package else {
+        guard var package = self.package else {
             return
         }
         
-        if package.packageFileURL == nil {
-            if let newestPackage = PackageListManager.shared.newestPackage(identifier: package.package, repoContext: package.sourceRepo) {
-                package = newestPackage
-                self.package = package
-            }
+        if let backup = self.savedProvisional, package.sourceRepo==nil {
+            package = backup
+            self.package = backup
+            self.savedProvisional = nil
         }
 
         let installedPackage = PackageListManager.shared.installedPackage(identifier: package.package)
@@ -248,6 +254,8 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
 
         downloadButton.package = package
         navBarDownloadButton?.package = package
+        
+        self.updatePaymentInfo()
         
         if let imageURL = package.rawControl["header"] {
             if imageURL != headerURL {
@@ -279,7 +287,17 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             ] as [String: Any])
         }
 
-        let rawDepiction = [
+        var rawDepiction = package.sourceRepo==nil ? [
+            "class": "DepictionStackView",
+            "views": [
+                [
+                    "class": "DepictionHeaderView",
+                    "title": String(localizationKey: "Package_Details_Tab"),
+                    "useBoldText" : false,
+                ],
+                ["class": "DepictionSeparatorView"],
+            ] + rawDescription
+        ] : [
             "class": "DepictionTabView",
             "tabs": [
                 [
@@ -304,7 +322,8 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             self.depictionView = depictionView
         }
 
-        if let depiction = package.depiction {
+        if !package.fromStatusFile,
+            let depiction = package.depiction {
             let urlRequest = URLManager.urlRequest(depiction)
             EvanderNetworking.request(request: urlRequest, type: Data.self) { [weak self] success, _, _, data in
                 guard success,
@@ -343,6 +362,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 ]
             ]
         }
+        
         if let repo = package.sourceRepo {
             views.insert([
                 "class": "DepictionSeparatorView"
@@ -353,11 +373,69 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             ], at: 1)
             views.insert([
                 "class": "DepictionTableButtonView",
-                "title": repo.displayName,
+                "title": RepoManager.shared.getUniqueName(repo: repo),
                 "action": "showRepoContext",
+                "context": repo as Any,
                 "_repo": repo.url?.absoluteString as Any
             ], at: 2)
         }
+        else if package.fromStatusFile {
+            views.insert([
+                "class": "DepictionSeparatorView"
+            ], at: 0)
+            views.insert([
+                "class": "DepictionHeaderView",
+                "title": String(localizationKey: "Repo")
+            ], at: 1)
+            
+            var repoPackages: [Package] = []
+            for repo in RepoManager.shared.repoList {
+                if let repoPackage = PackageListManager.shared.newestPackage(identifier: package.package, repoContext: repo) {
+                    repoPackages.append(repoPackage)
+                }
+            }
+            
+            repoPackages = PackageListManager.shared.sortPackages(packages: repoPackages, search: nil)
+            
+            var viewIndex = 2
+            for package in repoPackages {
+                guard let repo = package.sourceRepo else {
+                    continue
+                }
+                views.insert([
+                    "class": "DepictionTableTextButtonView",
+                    "title": repo.displayName,
+                    "text": package.version,
+                    "action": "showPackage",
+                    "context": package as Any,
+                ], at: viewIndex++)
+            }
+        }
+        else if let source=package.source, package.isProvisional ?? false {
+            var url: String
+
+            if source.suite == "./" {
+                url = source.uri.absoluteString
+            } else if let component = source.component {
+                url = source.uri.appendingPathComponent("dists").appendingPathComponent(source.suite).appendingPathComponent(component).absoluteString
+            } else {
+                url = "Invalid"
+            }
+                
+            views.insert([
+                "class": "DepictionSeparatorView"
+            ], at: 0)
+            views.insert([
+                "class": "DepictionHeaderView",
+                "title": String(localizationKey: "Repo")
+            ], at: 1)
+            views.insert([
+                "class": "DepictionSubheaderView",
+                "useBoldText": true,
+                "title": url
+            ], at: 2)
+        }
+        
         views.append([
             "class": "DepictionSubheaderView",
             "alignment": 1,
@@ -618,21 +696,20 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             }
         }
         
-        if installedPackage != nil,
-            let packageID = self.package?.package {
-            let ignoreUpdatesText = installedPackage?.wantInfo == .hold ?
+        if let installedPackage = installedPackage, let package = self.package {
+            let ignoreUpdatesText = installedPackage.wantInfo == .hold ?
                 String(localizationKey: "Package_Hold_Disable_Action") : String(localizationKey: "Package_Hold_Enable_Action")
             let ignoreUpdates = UIAlertAction(title: ignoreUpdatesText, style: .default) { _ in
-                if self.installedPackage?.wantInfo == .hold {
+                if installedPackage.wantInfo == .hold {
                     #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
-                    if DpkgWrapper.ignoreUpdates(false, package: packageID) {
-                        self.installedPackage?.wantInfo = .install
+                    if DpkgWrapper.ignoreUpdates(false, package: package.package) {
+                        installedPackage.wantInfo = .install
                     }
                     #endif
                 } else {
                     #if !targetEnvironment(simulator) && !TARGET_SIMULATOR
-                    if DpkgWrapper.ignoreUpdates(true, package: packageID) {
-                        self.installedPackage?.wantInfo = .hold
+                    if DpkgWrapper.ignoreUpdates(true, package: package.package) {
+                        installedPackage.wantInfo = .hold
                     }
                     #endif
                 }
@@ -675,28 +752,38 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         // Dismiss this view controller.
         self.dismiss(animated: true, completion: nil)
     }
-
-    func updatePurchaseStatus() {
-        if isUpdatingPurchaseStatus {
-            return
-        }
-        guard let package = self.package,
-            let sourceRepo = package.sourceRepo else {
-            return
-        }
-        isUpdatingPurchaseStatus = true
-
-        PaymentManager.shared.getPaymentProvider(for: sourceRepo) { error, provider in
-            if error != nil {
-                return
+    
+    private func updatePaymentInfo()
+    {
+        guard let package = self.package, package.commercial, let repo = package.sourceRepo else {
+            DispatchQueue.main.async {
+                self.downloadButton.paymentInfo = nil
+                self.navBarDownloadButton?.paymentInfo = nil
             }
-            provider?.getPackageInfo(forIdentifier: package.package) { error, info in
-                guard let info = info,
-                    error == nil else {
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.downloadButton.isEnabled = false
+            self.navBarDownloadButton?.isEnabled = false
+        }
+                
+        PaymentManager.shared.getPaymentProvider(for: repo) { error, provider in
+                guard error == nil, let provider = provider else {
                     return
                 }
+// we can always request price for packages even if the repo is not logged in
+//                guard provider.isAuthenticated else {
+//                    return //we have to re-verify its payment status if the repo is not logged in
+//                }
+
+            provider.getPackageInfo(forIdentifier: package.package) { error, info in
+                guard error == nil, let info=info, info.available else { return }
+                
                 DispatchQueue.main.async {
-                    self.isUpdatingPurchaseStatus = false
+                    self.downloadButton.isEnabled = true
+                    self.navBarDownloadButton?.isEnabled = true
+                    
                     self.downloadButton.paymentInfo = info
                     self.navBarDownloadButton?.paymentInfo = info
                 }

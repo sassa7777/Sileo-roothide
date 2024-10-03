@@ -76,10 +76,18 @@ class DownloadsTableViewCell: BaseSubtitleTableViewCell {
                                        ByteCountFormatter.string(fromByteCount: Int64(download.totalBytesWritten), countStyle: .file),
                                        ByteCountFormatter.string(fromByteCount: Int64(download.totalBytesExpectedToWrite), countStyle: .file))
             } else {
-                self.subtitle = String(localizationKey: "Queued_Package_Status")
+                if let repoName = package?.package.sourceRepo?.repoName {
+                    self.subtitle = "\(String(localizationKey: "Queued_Package_Status")) • \(repoName)"
+                } else {
+                    self.subtitle = String(localizationKey: "Queued_Package_Status")
+                }
             }
         } else if shouldHaveDownload && errorDescription==nil {
-            self.subtitle = String(localizationKey: "Queued_Package_Status")
+            if let repoName = package?.package.sourceRepo?.repoName {
+                self.subtitle = "\(String(localizationKey: "Queued_Package_Status")) • \(repoName)"
+            } else {
+                self.subtitle = String(localizationKey: "Queued_Package_Status")
+            }
             self.progress = 0
         } else {
             self.progress = 0
@@ -112,12 +120,12 @@ class DownloadsTableViewCell: BaseSubtitleTableViewCell {
         retryButton.isHidden = true
         let downloadMan = DownloadManager.shared
         guard let package = package,
-              let download = downloadMan.downloads[package.package.packageID],
+              let download = downloadMan.queuedDownloads[package.package.package],
               !download.success else { return }
         download.completed = false
         download.task = nil
         download.queued = false
-        NSLog("SileoLog: startMoreDownloads1")
+        NSLog("SileoLog: startMoreDownloads (retryDownload)")
         downloadMan.startMoreDownloads()
     }
     

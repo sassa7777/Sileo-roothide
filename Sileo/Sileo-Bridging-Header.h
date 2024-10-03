@@ -22,9 +22,9 @@ int posix_spawnattr_set_persona_gid_np(const posix_spawnattr_t* __restrict, uid_
 @property (assign, setter=_setBlurEnabled:, nonatomic) BOOL _blurEnabled;
 @end
 
-@interface UIApplication (Private)
--(void)_setForcedUserInterfaceLayoutDirection:(long long)arg1 ;
-@end
+//@interface UIApplication (Private)
+//-(void)_setForcedUserInterfaceLayoutDirection:(long long)arg1 ;
+//@end
 
 @interface UITabBarItem (Private)
 - (UIView *)view;

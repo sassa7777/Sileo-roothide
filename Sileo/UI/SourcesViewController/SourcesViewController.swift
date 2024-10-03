@@ -13,9 +13,16 @@ final class SourcesViewController: SileoViewController {
     private var sortedRepoList: [Repo] = []
     var updatingRepoList: [Repo] = []
     
+    var presentRepoUrl: URL?
+    var defaultPagePresent = false
+    var detailedPageUserPresent = false
+    
     private var tableView: SileoTableView?
     public var refreshControl = UIRefreshControl()
     private var inRefreshing = false
+    
+    static let refreshReposNotification = Notification.Name("SourcesViewController.refreshReposNotification")
+    static let reloadDataNotification = Notification.Name("SourcesViewController.reloadDataNotification")
     
     required init?(coder: NSCoder) {
         super.init(coder: coder)
@@ -27,6 +34,14 @@ final class SourcesViewController: SileoViewController {
                                                selector: #selector(self.reloadRepo(_:)),
                                                name: RepoManager.progressNotification,
                                                object: nil)
+        
+        NotificationCenter.default.addObserver(forName: SourcesViewController.refreshReposNotification, object: nil, queue: .main) { _ in
+            self.refreshSources(forceUpdate: false, forceReload: false, isBackground: true, useRefreshControl: false, useErrorScreen: false, completion: nil)
+        }
+        
+        NotificationCenter.default.addObserver(forName: SourcesViewController.reloadDataNotification, object: nil, queue: .main) { _ in
+            self.reloadData()
+        }
     }
     
     func canEditRow(indexPath: IndexPath) -> Bool {
@@ -51,13 +66,22 @@ final class SourcesViewController: SileoViewController {
             categoryVC.title = repo.repoName
         }
         
+        let touchGestureRecognizer = TouchGestureRecognizer(target: self, action: #selector(detailedPageUserInteracted))
+        categoryVC.view.addGestureRecognizer(touchGestureRecognizer)
+        
         return categoryVC
+    }
+
+    @objc func detailedPageUserInteracted() {
+        self.detailedPageUserPresent = true
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         
         tableView = SileoTableView(frame: .zero, style: .plain)
+//        tableView?.semanticContentAttribute = .forceLeftToRight //will only work for cells
+
         view.addSubview(tableView!)
         tableView?.translatesAutoresizingMaskIntoConstraints = false
         tableView?.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
@@ -94,6 +118,79 @@ final class SourcesViewController: SileoViewController {
         #endif
     
         NotificationCenter.default.addObserver(weakSelf as Any, selector: #selector(handleImageUpdate(_:)), name: SourcesTableViewCell.repoImageUpdate, object: nil)
+        
+// self.splitViewController?.isCollapsed may not be ready yet
+//        presentDefaultPage()
+        
+        self.splitViewController?.delegate = self
+    }
+
+    private func presentDefaultPage() {
+        NSLog("SileoLog: presentDefaultPage \(self.splitViewController) \(self.splitViewController?.isCollapsed)")
+        if let tableView = self.tableView, self.splitViewController?.isCollapsed == false {
+            let indexPath = IndexPath(row: 0, section: 0)
+            tableView.selectRow(at: indexPath, animated: true, scrollPosition: .none)
+            if !defaultPagePresent || presentRepoUrl != nil {
+                presentRepoUrl = nil
+                defaultPagePresent = true
+                detailedPageUserPresent = false
+                self.tableViewSelectRowAt(tableView: tableView, indexPath: indexPath)
+            }
+        }
+    }
+    
+    private func deselectRepos() {
+        if let tableView = self.tableView, self.splitViewController?.isCollapsed ?? false {
+            self.detailedPageUserPresent = false
+            if let selectedRows = tableView.indexPathsForSelectedRows {
+                 for indexPath in selectedRows {
+                     tableView.deselectRow(at: indexPath, animated: false)
+                 }
+             }
+        }
+    }
+    
+    override func viewWillLayoutSubviews() {
+        NSLog("SileoLog: SourcesViewController.viewWillLayoutSubviews")
+        super.viewDidLayoutSubviews()
+
+    }
+
+    override func viewDidLayoutSubviews() {
+        NSLog("SileoLog: SourcesViewController.viewDidLayoutSubviews \(self.splitViewController?.isCollapsed) \(self.presentRepoUrl)")
+        super.viewDidLayoutSubviews()
+
+        if let tableView = self.tableView, self.splitViewController?.isCollapsed == false
+        {
+            if self.presentRepoUrl == nil
+            {
+                self.presentDefaultPage()
+                return
+            }
+
+            let sourceSection = 1
+            for i in 0..<tableView.numberOfRows(inSection: sourceSection) {
+                let repo = sortedRepoList[i]
+                if repo.url == self.presentRepoUrl {
+                    let indexPath = IndexPath(row: i, section: sourceSection)
+                    tableView.selectRow(at: indexPath, animated: false, scrollPosition: .none)
+                }
+            }
+        }
+        else
+        {
+            deselectRepos()
+        }
+    }
+    
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        NSLog("SileoLog: SourcesViewController.traitCollectionDidChange")
+        updateSileoColors()
+    }
+    
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        NSLog("SileoLog: SourcesViewController.viewWillTransition \(self.splitViewController?.isCollapsed) \(self.presentRepoUrl)")
+        super.viewWillTransition(to: size, with: coordinator)
     }
     
     override var keyCommands: [UIKeyCommand]? {
@@ -110,11 +207,8 @@ final class SourcesViewController: SileoViewController {
         view.backgroundColor = .sileoBackgroundColor
     }
     
-    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
-        updateSileoColors()
-    }
-    
     override func viewWillAppear(_ animated: Bool) {
+        NSLog("SileoLog: SourcesViewController.viewWillAppear")
         super.viewWillAppear(animated)
         updateSileoColors()
         
@@ -126,9 +220,12 @@ final class SourcesViewController: SileoViewController {
                 }
             }
         }
+        
+        deselectRepos()
     }
-    
+
     override func viewDidAppear(_ animated: Bool) {
+        NSLog("SileoLog: SourcesViewController.viewDidAppear \(self.splitViewController?.isCollapsed) \(self.tableView?.indexPathsForSelectedRows)")
         super.viewDidAppear(animated)
         self.navigationController?.navigationBar._hidesShadow = true
         self.tableView?.backgroundColor = .sileoBackgroundColor
@@ -136,6 +233,12 @@ final class SourcesViewController: SileoViewController {
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        
+        if inRefreshing {
+            if let tableView = self.tableView, let refreshControl = tableView.refreshControl {
+                refreshControl.endRefreshing()
+            }
+        }
     }
     
     override func viewDidDisappear(_ animated: Bool) {
@@ -192,8 +295,19 @@ final class SourcesViewController: SileoViewController {
             _tmpManager.parsePlainTextFile(at: url)
         }
         
-        let URLs = _tmpManager.repoList.compactMap(\.url)
-        self.handleSourceAdd(urls: URLs, bypassFlagCheck: false)
+        var newRepos:[Repo] = []
+        for repo in _tmpManager.repoList {
+            if let url = URL(string: repo.rawURL) {
+                if let newRepo = RepoManager.shared.addDistRepo(url: url, suites: repo.suite, components: repo.components.joined(separator: " ")) {
+                    newRepos.append(newRepo)
+                }
+            }
+        }
+
+        if newRepos.count > 0 {
+            self.reloadData()
+            self.updateSpecific(newRepos)
+        }
     }
     
     @available(iOS 14.0, *)
@@ -387,9 +501,7 @@ final class SourcesViewController: SileoViewController {
     }
     
     func reSortList() {
-        sortedRepoList = RepoManager.shared.repoList.sorted(by: { obj1, obj2 -> Bool in
-            obj1.repoName.localizedCaseInsensitiveCompare(obj2.repoName) == .orderedAscending
-        })
+        sortedRepoList = RepoManager.shared.sortedRepoList()
     }
     
     private func deleteRepo(at indexPath: IndexPath) {
@@ -400,6 +512,10 @@ final class SourcesViewController: SileoViewController {
         updatingRepoList.removeAll { $0 == repo }
         self.updateFooterCount()
         NotificationCenter.default.post(name: PackageListManager.reloadNotification, object: nil)
+        
+        if repo.url == self.presentRepoUrl {
+            presentDefaultPage()
+        }
     }
     
     @objc func reloadRepo(_ notification: NSNotification) {
@@ -445,7 +561,7 @@ final class SourcesViewController: SileoViewController {
         
         let yesString = String(localizationKey: "Export_Yes")
         let yesAction = UIAlertAction(title: yesString, style: .default, handler: { _ in
-            let repos = self.sortedRepoList.map({ $0.rawURL }).joined(separator: "\n")
+            let repos = self.sortedRepoList.filter({$0.aptSource != nil}).map({ $0.aptSource! }).joined(separator: "\n")
             let activityVC = UIActivityViewController(activityItems: [repos], applicationActivities: nil)
             
             activityVC.popoverPresentationController?.sourceView = self.view
@@ -484,9 +600,10 @@ final class SourcesViewController: SileoViewController {
         
         let addAction = UIAlertAction(title: String(localizationKey: "Add_Source.Button.Add"), style: .default, handler: { [weak alert] _ in
             self.dismiss(animated: true, completion: nil)
-            if let repoURL = alert?.textFields?[0].text,
-                let url = URL(string: repoURL) {
-                self.handleSourceAdd(urls: [url], bypassFlagCheck: false)
+            if let repoURL = alert?.textFields?[0].text, let url = URL(string: repoURL) {
+                if ["http","https"].contains(url.scheme?.lowercased()) && url.host != nil {
+                    self.handleSourceAdd(sources: [url.absoluteString], bypassFlagCheck: false)
+                }
             }
         })
         alert.addAction(addAction)
@@ -505,7 +622,7 @@ final class SourcesViewController: SileoViewController {
         present(alert, animated: true, completion: nil)
     }
     
-    func presentAddClipBoardPrompt(sources: [URL]) {
+    func presentAddClipBoardPrompt(sources: [String]) {
         if sources.isEmpty {
             // I'm not quite sure how this happens, but it does sooooo
             return self.presentAddSourceEntryField(url: nil)
@@ -518,15 +635,14 @@ final class SourcesViewController: SileoViewController {
         
         var msg = String(format: String(localizationKey: "Auto_Add_Pasteboard_Sources.Body_Intro"), sources.count)
         msg.append(contentsOf: "\n\n")
-        let urlsJoined = sources.compactMap { url -> String in
-            url.absoluteString
-        }.joined(separator: "\n")
-        msg.append(contentsOf: urlsJoined)
+        msg.append(sources.compactMap { source -> String in
+            "\"\(source)\""
+        }.joined(separator: "\n"))
         
         let alert = UIAlertController(title: titleText, message: msg, preferredStyle: .alert)
         
         let addAction = UIAlertAction(title: addText, style: .default, handler: { _ in
-            self.handleSourceAdd(urls: sources, bypassFlagCheck: false)
+            self.handleSourceAdd(sources: sources, bypassFlagCheck: false)
             self.dismiss(animated: true, completion: nil)
         })
         alert.addAction(addAction)
@@ -544,7 +660,7 @@ final class SourcesViewController: SileoViewController {
         self.present(alert, animated: true, completion: nil)
     }
     
-    func addDistRepo(string: String?) {
+    func addDistRepo(string: String?, suites: String?=nil, components: String?=nil) {
         let title = String(localizationKey: "Add_Source.Title")
         let msg = String(localizationKey: "Add_Dist_Repo")
         let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
@@ -557,9 +673,13 @@ final class SourcesViewController: SileoViewController {
         }
         alert.addTextField { textField in
             textField.placeholder = "Suites"
+            textField.text = suites
+            textField.keyboardType = .URL
         }
         alert.addTextField { textField in
             textField.placeholder = "Components"
+            textField.text = components
+            textField.keyboardType = .URL
         }
         
         let addAction = UIAlertAction(title: String(localizationKey: "Add_Source.Button.Add"), style: .default, handler: { [weak self] _ in
@@ -568,6 +688,8 @@ final class SourcesViewController: SileoViewController {
                   let suiteField = alert.textFields?[1],
                   let componentField = alert.textFields?[2],
                   let url = URL(string: urlField.text ?? "") else { return }
+            guard ["http","https"].contains(url.scheme?.lowercased()) && url.host != nil else { return }
+            guard (urlField.text?.count ?? 0)>0, (suiteField.text?.count ?? 0)>0, (componentField.text?.count ?? 0)>0 else { return }
             guard let repo = RepoManager.shared.addDistRepo(url: url, suites: suiteField.text ?? "", components: componentField.text ?? "") else {
                 return
             }
@@ -614,78 +736,66 @@ final class SourcesViewController: SileoViewController {
         self.presentAddSourceEntryField(url: nil)
     }
     #endif
-
-//    func showFlaggedSourceWarningController(urls: [URL]) {
-//        let flaggedSourceController = FlaggedSourceWarningViewController(nibName: "FlaggedSourceWarningViewController", bundle: nil)
-//        flaggedSourceController.shouldAddAnywayCallback = {
-//            self.handleSourceAdd(urls: urls, bypassFlagCheck: true)
-//        }
-//        flaggedSourceController.urls = urls
-//        flaggedSourceController.modalPresentationStyle = .formSheet
-//        present(flaggedSourceController, animated: true)
-//    }
     
-    func handleSourceAdd(urls: [URL], bypassFlagCheck: Bool) {
-        func addRepo() {
-            DispatchQueue.main.async {
-                let repos = RepoManager.shared.addRepos(with: urls)
+    func handleSourceAdd(sources: [String], bypassFlagCheck: Bool) {
+
+        var newRepos: [Repo] = []
+        for source in sources {
+            
+            let parts = source.trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).filter({$0.isEmpty==false})
+            guard let url = URL(string: parts[0]) else { continue }
+            
+            if parts.count == 1 {
+                let repos = RepoManager.shared.addRepos(with: [url])
                 if !repos.isEmpty {
-                    self.reloadData()
-                    self.updateSpecific(repos)
+                    newRepos.append(contentsOf: repos)
                 }
+                continue
+            }
+            
+            let suite = (parts.count > 1) ? parts[1] : "./"
+            let components = (parts.count > 2) ? Array(parts[2...]) : []
+            
+            if let repo = RepoManager.shared.addDistRepo(url: url, suites: suite, components: components.joined(separator: " ")) {
+                newRepos.append(repo)
             }
         }
-        func handleAdd() {
-//            CanisterResolver.piracy(urls) { safe, piracy in
-//                DispatchQueue.main.async {
-//                    if !safe.isEmpty {
-//                        addRepo()
+        
+        self.reloadData()
+        self.updateSpecific(newRepos)
+        
+//        if newRepos.count > 1 {
+//            self.updateSpecific(newRepos)
+//            return
+//        }
+//
+//        if newRepos.count == 1 {
+//            let repo = newRepos[0]
+//            guard let url = repo.url else { return }
+//            EvanderNetworking.head(url: url.appendingPathComponent("Release")) { success in
+//                if success {
+//                    DispatchQueue.main.async {
+//                        self.updateSingleRepo(repo)
 //                    }
-//                    if !piracy.isEmpty {
-//                        self.showFlaggedSourceWarningController(urls: piracy)
+//                } else {
+//                    DispatchQueue.main.async { [self] in
+//                        let alert = UIAlertController(title: String(localizationKey: "Warning"),
+//                                                      message: String(format: String(localizationKey: "Incorrect_Repo"), url.absoluteString),
+//                                                      preferredStyle: .alert)
+//                        alert.addAction(UIAlertAction(title: String(localizationKey: "Add_Source.Title"), style: .default, handler: { _ in
+//                            self.updateSingleRepo(repo)
+//                        }))
+//                        alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
+//                            RepoManager.shared.remove(repo: repo)
+//                            self.reloadData()
+//
+//                            alert.dismiss(animated: true)
+//                        }))
+//                        self.present(alert, animated: true)
 //                    }
 //                }
 //            }
-            
-            
-            addRepo()
-        }
-        
-        if bypassFlagCheck {
-            addRepo()
-            return
-        }
-        
-        if urls.count == 1 {
-            let url = urls[0]
-            if url.host == "apt.bigboss.org"
-                || url.host == "apt.thebigboss.org"
-                || url.host == "thebigboss.org"
-                || url.host == "bigboss.org"
-                || url.host == "apt.procurs.us" {
-                return handleAdd()
-            }
-            EvanderNetworking.head(url: url.appendingPathComponent("Release")) { success in
-                if success {
-                    handleAdd()
-                } else {
-                    DispatchQueue.main.async { [self] in
-                        let alert = UIAlertController(title: String(localizationKey: "Warning"),
-                                                      message: String(format: String(localizationKey: "Incorrect_Repo"), url.absoluteString),
-                                                      preferredStyle: .alert)
-                        alert.addAction(UIAlertAction(title: String(localizationKey: "Add_Source.Title"), style: .default, handler: { _ in
-                            handleAdd()
-                        }))
-                        alert.addAction(UIAlertAction(title: String(localizationKey: "Cancel"), style: .cancel, handler: { _ in
-                            alert.dismiss(animated: true)
-                        }))
-                        self.present(alert, animated: true)
-                    }
-                }
-            }
-        } else {
-            handleAdd()
-        }
+//        }
     }
     
     // Smart Handling of pasted in sources
@@ -731,11 +841,17 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
             headerBlur.autoresizingMask = [.flexibleWidth, .flexibleBottomMargin]
             headerView.addSubview(headerBlur)
             
-            let titleView = SileoLabelView(frame: CGRect(x: 16, y: 0, width: 320, height: 28))
+            let titleView = SileoLabelView(frame: CGRect(x: 0, y: 0, width: 320, height: 28))
             titleView.font = UIFont.systemFont(ofSize: 22, weight: .bold)
             titleView.text = text
-            titleView.autoresizingMask = .flexibleWidth
+            titleView.autoresizingMask = [.flexibleWidth]
             headerView.addSubview(titleView)
+            
+            titleView.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                titleView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 16),
+                titleView.heightAnchor.constraint(equalToConstant: titleView.frame.size.height)
+                ])
             
 //            let separatorView = SileoSeparatorView(frame: CGRect(x: 16, y: 35, width: 304, height: 1))
 //            separatorView.autoresizingMask = .flexibleWidth
@@ -771,7 +887,7 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = (tableView.dequeueReusableCell(withIdentifier: "SourcesViewControllerCellidentifier") as? SourcesTableViewCell) ??
             SourcesTableViewCell(style: .subtitle, reuseIdentifier: "SourcesViewControllerCellidentifier")
-        
+
         if indexPath.section == 0 {
             cell.repo = nil
         } else {
@@ -807,7 +923,7 @@ extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
         }
         
         let repo = sortedRepoList[indexPath.row]
-        UIPasteboard.general.url = repo.url
+        UIPasteboard.general.string = repo.aptSource
     }
     #else
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
@@ -815,7 +931,7 @@ extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
                                    previewProvider: nil) { [weak self] _ in
             let copyAction = UIAction(title: "Copy") { [weak self] _ in
                 let repo = self?.sortedRepoList[indexPath.row]
-                UIPasteboard.general.url = repo?.url
+                UIPasteboard.general.string = repo?.aptSource
             }
             let deleteAction = UIAction(title: "Remove") { [weak self] _ in
                 guard let strong = self else { return }
@@ -846,18 +962,32 @@ extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
         self.canEditRow(indexPath: indexPath)
     }
     
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+    func tableViewSelectRowAt(tableView: UITableView, indexPath: IndexPath) {
+        
         let categoryVC = self.controller(indexPath: indexPath)
         let navController = SileoNavigationController(rootViewController: categoryVC)
         self.splitViewController?.showDetailViewController(navController, sender: self)
         
-        if self.splitViewController?.isCollapsed ?? false { // Only deselect the row if the split view contoller is not showing multiple
-            tableView.deselectRow(at: indexPath, animated: true)
-        }
+        self.presentRepoUrl = categoryVC.repoContext?.url
     }
     
-    func tableView(_ tableView: UITableView,
-                   trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        
+        tableViewSelectRowAt(tableView: tableView, indexPath: indexPath)
+        
+        self.detailedPageUserPresent = true
+        
+        if indexPath.section==0 && indexPath.row==0 {
+            self.defaultPagePresent = true
+        }
+
+// should handle this when back to sources list
+//        if self.splitViewController?.isCollapsed ?? false { // Only deselect the row if the split view contoller is not showing multiple
+//            tableView.deselectRow(at: indexPath, animated: true)
+//        }
+    }
+    
+    func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         // We don't want to be able to delete the top section so we just return early here
         if indexPath.section == 0 { return nil }
         let refresh = UIContextualAction(style: .normal, title: String(localizationKey: "Refresh")) { _, _, completionHandler in
@@ -876,6 +1006,14 @@ extension SourcesViewController: UITableViewDelegate { // UITableViewDelegate
     }
 }
 
+@available(iOS 14.0, *)
+extension SourcesViewController: UISplitViewControllerDelegate {
+    func splitViewController(_ splitViewController: UISplitViewController, collapseSecondary secondaryViewController: UIViewController, onto primaryViewController: UIViewController) -> Bool {
+        NSLog("SileoLog: splitViewController:collapseSecondary \(presentRepoUrl) \(detailedPageUserPresent)")
+        return !detailedPageUserPresent
+    }
+}
+
 extension SourcesViewController: UIViewControllerPreviewingDelegate {
     func previewingContext(_ previewingContext: UIViewControllerPreviewing, viewControllerForLocation location: CGPoint) -> UIViewController? {
         guard let indexPath = self.tableView?.indexPathForRow(at: location) else {
@@ -889,5 +1027,32 @@ extension SourcesViewController: UIViewControllerPreviewingDelegate {
     func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController) {
         let navController = SileoNavigationController(rootViewController: viewControllerToCommit)
         self.splitViewController?.showDetailViewController(navController, sender: self)
+    }
+}
+
+class TouchGestureRecognizer: UIGestureRecognizer {
+    private var target: Any?
+    private var action: Selector?
+    override init(target: Any?, action: Selector?) {
+        super.init(target: target, action: action)
+        self.cancelsTouchesInView = false
+        self.target = target
+        self.action = action
+    }
+    
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        
+        _ = (self.target as AnyObject).perform(action, with: nil)
+    }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesMoved(touches, with: event)
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
     }
 }

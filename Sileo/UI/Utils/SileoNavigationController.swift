@@ -12,4 +12,15 @@ class SileoNavigationController: UINavigationController {
     override var childForStatusBarStyle: UIViewController? {
         viewControllers.last
     }
+    
+    public var rootViewController: UIViewController?
+    
+    override public init(rootViewController: UIViewController) {
+        super.init(rootViewController: rootViewController)
+        self.rootViewController = rootViewController
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+    }
 }

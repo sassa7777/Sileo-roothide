@@ -279,6 +279,9 @@ final public class MacRootWrapper {
 }
 
 func deleteFileAsRoot(_ url: URL) {
+    NSLog("SileoLog: deleteFileAsRoot \(url)")
+//    Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
+
     guard FileManager.default.fileExists(atPath: url.path) else {return}
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.removeItem(at: url)
@@ -288,19 +291,21 @@ func deleteFileAsRoot(_ url: URL) {
 }
 
 func hardLinkAsRoot(from: URL, to: URL) {
-    deleteFileAsRoot(to)
+    //this may cause the file status to be out of sync with `ln`, and `ln -f` command will automatically overwrite the target file
+//    deleteFileAsRoot(to)
 
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.createSymbolicLink(at: to, withDestinationURL: from)
     #else
-    spawnAsRoot(args: [CommandPath.ln, rootfs("\(from.path)"), rootfs("\(to.path)")])
+    spawnAsRoot(args: [CommandPath.ln, "-f", rootfs("\(from.path)"), rootfs("\(to.path)")])
     spawnAsRoot(args: [CommandPath.chown, "0:0", rootfs("\(to.path)")])
     spawnAsRoot(args: [CommandPath.chmod, "0644", rootfs("\(to.path)")])
     #endif
 }
 
 func moveFileAsRoot(from: URL, to: URL) {
-    deleteFileAsRoot(to)
+    //this may cause the file status to be out of sync with `mv`, and `mv` will automatically overwrite the target file
+//    deleteFileAsRoot(to)
 
     #if targetEnvironment(simulator) || TARGET_SANDBOX
     try? FileManager.default.moveItem(at: from, to: to)

@@ -177,7 +177,7 @@ class DepictionFormViewController: SileoTableViewController {
         values["udid"] = UIDevice.current.uniqueIdentifier
         values["device"] = UIDevice.current.platform
 
-        let provider = PaymentManager.shared.getPaymentProvider(for: action.absoluteString)
+        let provider = PaymentManager.shared.getPaymentProviderCache(for: action.absoluteString)
         if let provider = provider,
             provider.isAuthenticated {
             values["token"] = provider.authenticationToken

@@ -10,8 +10,7 @@ import UIKit
 final class Package: PackageProtocol {
     
     public var package: String
-    public var packageID: String
-    public var name: String?
+    public var name: String
     public var version: String
     public var architecture: String?
     public var author: Maintainer?
@@ -23,7 +22,7 @@ final class Package: PackageProtocol {
     public var depiction: URL?
     public var icon: URL?
     public var sourceFile: String?
-    public var source: URL?
+    public var source: ProvisionalRepo?
     public var isProvisional: Bool?
     public var sourceFileURL: URL?
     public var rawControl: [String: String] = [:]
@@ -33,7 +32,7 @@ final class Package: PackageProtocol {
     public var installedSize: Int?
     public var tags: PackageTags = .none
     public var nativeDepiction: URL?
-    public var rootlessV2: Bool = false
+    public var origArchitecture: String?
     
     public var allVersionsInternal = [String: Package]()
     public var allVersions: [Package] {
@@ -45,11 +44,10 @@ final class Package: PackageProtocol {
     public var eFlag: pkgeflag = .ok
     public var status: pkgstatus = .installed
     public var installDate: Date?
-    public var debPath: String?
+    public var local_deb: String?
     
     public var filename: String?
     public var size: String?
-    public var packageFileURL: URL?
     public var userRead = false
     
     public var defaultIcon: UIImage {
@@ -82,8 +80,8 @@ final class Package: PackageProtocol {
     
     init(package: String, version: String) {
         self.package = package
-        self.packageID = package
         self.version = version
+        self.name = self.package
     }
     
     func hash(into hasher: inout Hasher) {

@@ -16,6 +16,17 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     private var popupLock = DispatchSemaphore(value: 1)
     private var shouldSelectIndex = -1
     private var fuckedUpSources = false
+//    private let ipadModeMinWidth = CGFloat(752) //debug
+    private let ipadModeMinWidth = CGFloat(768)
+    
+    private var popupQueueLock = DispatchSemaphore(value: 1)
+    private static let popupQueueContext = 50
+    private static let popupQueueKey = DispatchSpecificKey<Int>()
+    private static let popupQueue: DispatchQueue = {
+        let queue = DispatchQueue(label: "Sileo.PopupQueue", qos: .userInitiated)
+        queue.setSpecific(key: popupQueueKey, value: popupQueueContext)
+        return queue
+    }()
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -87,10 +98,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         presentPopup(completion: nil)
     }
     
-    func presentPopup(completion: (() -> Void)?) {
-        guard let downloadsController = downloadsController,
-              !popupIsPresented
-        else {
+    func presentPopup(animated:Bool = true, completion: (() -> Void)?) {
+        NSLog("SileoLog: TabBarController.presentPopup \(popupIsPresented), \(downloadsController), \(completion)")
+
+        guard let downloadsController = downloadsController, !popupIsPresented else {
             if let completion = completion {
                 completion()
             }
@@ -117,7 +128,16 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         }
         self.popupBar.progressViewStyle = .bottom
         self.popupInteractionStyle = .drag
-        self.presentPopupBar(withContentViewController: downloadsController, animated: true, completion: completion)
+                
+        TabBarController.popupQueue.async {
+            self.popupQueueLock.wait()
+            DispatchQueue.main.async {
+                self.presentPopupBar(withContentViewController: downloadsController, animated: animated) {
+                    completion?()
+                    self.popupQueueLock.signal()
+                }
+            }
+        }
         
         self.updateSileoColors()
     }
@@ -126,7 +146,9 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         dismissPopup(completion: nil)
     }
     
-    func dismissPopup(completion: (() -> Void)?) {
+    func dismissPopup(animated:Bool = true, completion: (() -> Void)?) {
+        NSLog("SileoLog: TabBarController.dismissPopup \(popupIsPresented) \(completion)")
+
         guard popupIsPresented else {
             if let completion = completion {
                 completion()
@@ -140,7 +162,16 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         }
         
         popupIsPresented = false
-        self.dismissPopupBar(animated: true, completion: completion)
+            
+        TabBarController.popupQueue.async {
+            self.popupQueueLock.wait()
+            DispatchQueue.main.async {
+                self.dismissPopupBar(animated: animated) {
+                    completion?()
+                    self.popupQueueLock.signal()
+                }
+            }
+        }
     }
     
     func presentPopupController() {
@@ -148,6 +179,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func presentPopupController(completion: (() -> Void)?) {
+        NSLog("SileoLog: TabBarController.presentPopupController \(completion)")
+
         guard popupIsPresented else {
             if let completion = completion {
                 completion()
@@ -168,6 +201,8 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     func dismissPopupController(completion: (() -> Void)?) {
+        NSLog("SileoLog: TabBarController.dismissPopupController \(completion)")
+
         guard popupIsPresented else {
             completion?()
             return
@@ -185,21 +220,23 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
         updatePopup(completion: nil)
     }
     
-    func updatePopup(completion: (() -> Void)? = nil, bypass: Bool = false) {
+    func updatePopup(animated:Bool = true, completion: (() -> Void)? = nil, bypass: Bool = false) {
         func hideRegardless() {
-            if UIDevice.current.userInterfaceIdiom == .pad && self.view.frame.width >= 768 {
+            if UIDevice.current.userInterfaceIdiom == .pad && self.view.frame.width >= ipadModeMinWidth {
                 downloadsController?.popupItem.title = String(localizationKey: "Queued_Package_Status")
                 downloadsController?.popupItem.subtitle = String(format: String(localizationKey: "Package_Queue_Count"), 0)
-                self.presentPopup(completion: completion)
+                self.presentPopup(animated: animated, completion: completion)
             } else {
-                self.dismissPopup(completion: completion)
+                self.dismissPopup(animated: animated, completion: completion)
             }
         }
-        if bypass {
-            hideRegardless()
-            return
-        }
+//we should never dismiss the popup if the queue is not empty (will cause TabBar to never display anymore)
+//        if bypass {
+//            hideRegardless()
+//            return
+//        }
         let manager = DownloadManager.shared
+        NSLog("SileoLog: updatePopup(\(completion),\(bypass)) : \(self.view.frame.width) : \(manager.lockedForInstallation) \(manager.downloadingPackages()) \(manager.operationCount()) \(manager.readyPackages()) \(manager.uninstallingPackages())")
         if manager.lockedForInstallation {
             downloadsController?.popupItem.title = String(localizationKey: "Installing_Package_Status")
             downloadsController?.popupItem.subtitle = String(format: String(localizationKey: "Package_Queue_Count"), manager.readyPackages())
@@ -226,7 +263,10 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
             downloadsController?.popupItem.progress = 0
             self.presentPopup(completion: completion)
         } else {
-            hideRegardless()
+            DispatchQueue.main.async {
+                //requires async due the deadlock: dismissPopupController->(LNPopupController)->viewDidLayoutSubviews->updatePopup->dismissPopup on iphone mode on ipad
+                hideRegardless()
+            }
         }
     }
     
@@ -235,12 +275,13 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     override var defaultFrameForBottomDockingView: CGRect {
+        NSLog("SileoLog: TabBarController.defaultFrameForBottomDockingView")
         var tabBarFrame = self.tabBar.frame
         tabBarFrame.origin.y = self.view.bounds.height - tabBarFrame.height
         if UIDevice.current.userInterfaceIdiom == .pad {
             tabBarFrame.origin.x = 0
             tabBarFrame.size.width = self.view.bounds.width
-            if tabBarFrame.width >= 768 {
+            if tabBarFrame.width >= ipadModeMinWidth {
                 tabBarFrame.size.width -= 320
             }
         }
@@ -249,7 +290,7 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     
     override var insetsForBottomDockingView: UIEdgeInsets {
         if UIDevice.current.userInterfaceIdiom == .pad {
-            if self.view.bounds.width < 768 {
+            if self.view.bounds.width < ipadModeMinWidth {
                 return .zero
             }
             return UIEdgeInsets(top: self.tabBar.frame.height, left: self.view.bounds.width - 320, bottom: 0, right: 0)
@@ -272,11 +313,12 @@ class TabBarController: UITabBarController, UITabBarControllerDelegate {
     }
     
     override func viewDidLayoutSubviews() {
+        NSLog("SileoLog: TabBarController.viewDidLayoutSubviews")
         super.viewDidLayoutSubviews()
         
         self.tabBar.itemPositioning = .centered
         if UIDevice.current.userInterfaceIdiom == .pad {
-            self.updatePopup()
+            self.updatePopup(animated: false)
         }
     }
     

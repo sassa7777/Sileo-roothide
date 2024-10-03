@@ -13,7 +13,7 @@ import UIKit
 import AppKit
 #endif
 
-
+//the language for current app, not the current system language=(UI Layout direction)
 final public class LanguageHelper {
     
     public static let shared = LanguageHelper()
@@ -23,9 +23,9 @@ final public class LanguageHelper {
     public var isRtl: Bool? {
         didSet {
             guard let isRtl else { return }
-            #if canImport(UIKit)
-            UIApplication.overrideLayout(rtl: isRtl)
-            #endif
+//            #if canImport(UIKit)
+//            UIApplication.overrideLayout(rtl: isRtl)
+//            #endif
         }
     }
     

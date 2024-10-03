@@ -40,7 +40,7 @@ final public class EvanderDownloader: NSObject {
     static let config = URLSessionConfiguration.default
     
     private var request: URLRequest
-    private var task: URLSessionDownloadTask?
+    public var task: URLSessionDownloadTask?
     public var container = EvanderDownloadContainer()
     
     public var progressCallback: ((_ task : EvanderDownloader, _ progress: DownloadProgress) -> Void)? {
@@ -135,7 +135,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     
     // The Download Finished
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        NSLog("SileoLog: didFinishDownloadingTo \(downloadTask.response?.url) task=\(downloadTask.taskIdentifier) url=\(location)  response=\(downloadTask.response)")
+        NSLog("SileoLog: didFinishDownloading task=\(downloadTask.taskIdentifier)/\(self.sessions[downloadTask]) url=\(downloadTask.response?.url) file=\(location)  response=\(downloadTask.response)")
         
         guard let downloader = self.sessions[downloadTask] else { return }
         
@@ -169,7 +169,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     // The Download has made Progress
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         
-        NSLog("SileoLog: didWriteData task=\(downloadTask.taskIdentifier)  (\(totalBytesWritten)+\(bytesWritten)/\(totalBytesExpectedToWrite)) \(downloadTask.response)") //totalBytesExpectedToWrite may be -1, no 'Content Length'? or 404
+        NSLog("SileoLog: didWriteData task=\(downloadTask.taskIdentifier)/\(self.sessions[downloadTask])  (\(totalBytesWritten)+\(bytesWritten)/\(totalBytesExpectedToWrite)) \(downloadTask.response)") //totalBytesExpectedToWrite may be -1, no 'Content Length'? or 404
         
         guard let downloader = self.sessions[downloadTask] else { return }
         
@@ -186,7 +186,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     // Checking for errors in the download
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         
-        NSLog("SileoLog: didCompleteWithError task=\(task.taskIdentifier) status=\((task.response as? HTTPURLResponse)?.statusCode) \nresp=\(task.response?.url) \nreq=\(task.currentRequest?.url) error=\n\(error)")
+        NSLog("SileoLog: didCompleteWithError task=\(task.taskIdentifier)/\(self.sessions[task]) status=\((task.response as? HTTPURLResponse)?.statusCode) resp=\(task.response?.url) req=\(task.currentRequest?.url) error=\n\(error)")
         
         guard let downloader = self.sessions[task] else { return }
         
@@ -203,14 +203,14 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     
     // Tell the caller that the download is waiting for network
     public func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
-        NSLog("SileoLog: taskIsWaitingForConnectivity \(session) task=\(task.taskIdentifier)")
+        NSLog("SileoLog: taskIsWaitingForConnectivity \(session) task=\(task.taskIdentifier)/\(self.sessions[task])")
         guard let downloader = self.sessions[task] else { return }
         downloader.container.waitingCallback?(downloader, "Waiting For Connection")
     }
     
     // The Download started again with some progress
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didResumeAtOffset fileOffset: Int64, expectedTotalBytes: Int64) {
-        NSLog("SileoLog: didResumeAtOffset \(session) task=\(downloadTask.taskIdentifier)")
+        NSLog("SileoLog: didResumeAtOffset \(session) task=\(downloadTask.taskIdentifier)/\(self.sessions[downloadTask])")
         guard let downloader = self.sessions[downloadTask] else { return }
         downloader.container.progress.period = 0
         downloader.container.progress.total = fileOffset
@@ -219,7 +219,7 @@ final public class EvanderDownloadDelegate: NSObject, URLSessionDownloadDelegate
     }
     
     public func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        NSLog("SileoLog: willPerformHTTPRedirection \(session) task=\(task.taskIdentifier)\n\(response.url)\n\(request.url)")
+        NSLog("SileoLog: willPerformHTTPRedirection \(session) task=\(task.taskIdentifier)/\(self.sessions[task])\n\(response.url)\n\(request.url)")
         completionHandler(request)
     }
 }

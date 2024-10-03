@@ -179,11 +179,11 @@ class APTWrapper {
                          "-oDpkg::Options::=--force-confdef",
                          "-oDpkg::Options::=--force-confnew"]
         for package in installs {
-            var packagesStr = package.package.package + "=" + package.package.version
-            if package.package.package.contains("/") {
-                packagesStr = (package.package.debPath != nil) ? rootfs(package.package.debPath!) : rootfs(package.package.package)
+            if let local_deb = package.package.local_deb {
+                arguments.append(rootfs(local_deb))
+            } else {
+                arguments.append(package.package.package + "=" + package.package.version)
             }
-            arguments.append(packagesStr)
         }
         for package in removals {
             let packageStr = package.package.package + "-"
@@ -211,7 +211,7 @@ class APTWrapper {
             pipeObject.pipeCompletion = { status in
                 wrapper.resetConnection()
                 spawnAsRoot(args: [CommandPath.aptget, "clean"])
-                for file in DownloadManager.shared.cachedFiles.raw {
+                for file in DownloadManager.shared.cachedDownloadFiles.raw {
                     deleteFileAsRoot(file)
                 }
                 completionCallback(Int(status), finish, false)
@@ -499,7 +499,7 @@ class APTWrapper {
             }
 
             spawnAsRoot(args: [CommandPath.aptget, "clean"])
-            for file in DownloadManager.shared.cachedFiles.raw {
+            for file in DownloadManager.shared.cachedDownloadFiles.raw {
                 deleteFileAsRoot(file)
             }
             completionCallback(Int(status), finish, refreshSileo)

@@ -46,13 +46,7 @@ final class Repo: Equatable {
             if !repoNameTmp { return }
             repoNameTmp = false
             func reloadData() {
-                guard let tabBarController = UIApplication.shared.windows.first?.rootViewController as? UITabBarController,
-                    let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-                    let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController,
-                    let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController else {
-                    return
-                }
-                sourcesVC.reloadData()
+                NotificationCenter.default.post(name: SourcesViewController.reloadDataNotification, object: nil)
             }
             if Thread.isMainThread {
                 reloadData()
@@ -99,11 +93,10 @@ final class Repo: Equatable {
     
     public func reloadInstalled() {
         if packageDict.isEmpty { installed = nil }
-        let installed = Array(PackageListManager.shared.installedPackages.values)
+        let installed = packageDict.values //using repo packages instead of local installed packages
         self.installed = installed.filter { installed -> Bool in
-            guard let package = packageDict[installed.packageID] else { return false }
-            if package.version == installed.version { return true }
-            return DpkgWrapper.isVersion(package.version, greaterThan: installed.version)
+            //consistent with PackageListManager--contextInstalled
+            return PackageListManager.shared.installedPackages.keys.contains(installed.package)
         }
         NotificationCenter.default.post(name: RepoManager.progressNotification, object: self)
     }
@@ -160,6 +153,22 @@ final class Repo: Equatable {
         }
     }
     
+    var aptSource: String? {
+        var cols = [rawURL]
+        if isFlat {
+            if suite != "./" {
+                cols.append(suite)
+            }
+        } else {
+            if components.isEmpty {
+                return nil
+            }
+            cols.append(suite)
+            cols.append(contentsOf: components)
+        }
+        return cols.joined(separator: " ")
+    }
+    
     var isFlat: Bool {
         suite.hasSuffix("/") || components.isEmpty
     }
@@ -177,5 +186,5 @@ final class Repo: Equatable {
 }
 
 func == (lhs: Repo, rhs: Repo) -> Bool {
-    lhs.rawURL == rhs.rawURL && lhs.suite == rhs.suite
+    lhs.rawURL == rhs.rawURL && lhs.suite == rhs.suite && Set(lhs.components) == Set(rhs.components)
 }

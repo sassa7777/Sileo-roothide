@@ -131,7 +131,9 @@ extension SettingsViewController { // UITableViewDataSource
                 let style = UITableViewCell.CellStyle.subtitle
                 let id = "LoadingCellIdentifier"
                 let cellClass = SettingsLoadingTableViewCell.self
-                return self.reusableCell(withStyle: style, reuseIdentifier: id, cellClass: cellClass)
+                let cell = self.reusableCell(withStyle: style, reuseIdentifier: id, cellClass: cellClass) as! SettingsLoadingTableViewCell
+                cell.startAnimating()
+                return cell
             }
             return UITableViewCell()
         case 1: // Translation Credit Section OR Settings section
@@ -217,6 +219,7 @@ extension SettingsViewController { // UITableViewDataSource
             default:
                 fatalError("You done goofed")
             }
+            cell.sync()
             return cell
         case 3: // About section
             switch indexPath.row {

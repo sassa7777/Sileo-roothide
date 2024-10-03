@@ -13,6 +13,7 @@ class PaymentManager {
     
     var paymentProvidersForURL = [String: PaymentProvider]()
     var paymentProvidersForEndpoint = [String: PaymentProvider]()
+    var allPaymentProvidersCached = false
     
     func removeProviders(for repo: Repo) {
         print("Providers for URL = \(paymentProvidersForURL)\nProviders for Endpoint = \(paymentProvidersForEndpoint)\nDownload Provider = \(DownloadManager.shared.repoDownloadOverrideProviders)")
@@ -29,15 +30,25 @@ class PaymentManager {
         var providers = Set<PaymentProvider>()
         for repo in RepoManager.shared.repoList {
             group.enter()
-            getPaymentProvider(for: repo) { _, provider in
-                if provider != nil && provider!.baseURL.isSecure {
-                    providers.insert(provider!)
+            getPaymentProvider(for: repo) { error, provider in
+                NSLog("SileoLog: getAllPaymentProviders \(repo.displayName) -> \(error) : \(provider) : \(provider?.baseURL)")
+                if let provider = provider, provider.baseURL.isSecure {
+                    providers.insert(provider)
                 }
                 group.leave()
             }
         }
-        group.notify(queue: .main) {
-            completion(providers)
+        //just return the cache and let them update in the background
+        if allPaymentProvidersCached {
+            DispatchQueue.main.async {
+                completion(Set(self.paymentProvidersForEndpoint.values))
+            }
+        } else {
+            group.notify(queue: .main) {
+                NSLog("SileoLog: getAllPaymentProviders finished")
+                self.allPaymentProvidersCached = true
+                completion(providers)
+            }
         }
     }
     
@@ -56,24 +67,33 @@ class PaymentManager {
         }
         let request = URLManager.urlRequest(requestURL, includingDeviceInfo: false)
         
-        URLSession.shared.dataTask(with: request) { data, _, error in
+        URLSession.shared.dataTask(with: request) { data, reponse, error in
+            NSLog("SileoLog: getPaymentProvider:\(repo.displayName) data=\(data):\(data?.count) error=\(error) reponse=\(reponse)")
             // The `error` object here is almost always nil.
             // Consider using the TBURLRequestOptions pod
-            guard error == nil,
-                let data = data else {
-                    return completion(PaymentError(error: error), nil)
+            if let error = error {
+                return completion(PaymentError(error: error), nil)
+            }
+            guard let reponse=reponse as? HTTPURLResponse else {
+                return completion(.invalidResponse, nil)
+            }
+            guard reponse.statusCode == 200 else {
+                return completion(PaymentError(message: "statusCode=\(reponse.statusCode)"), nil)
+            }
+            guard let data = data else {
+                return completion(.invalidResponse, nil)
             }
             // Decode response
             guard var endpoint = String(data: data, encoding: .utf8) else {
                 return completion(PaymentError.noPaymentProvider, nil)
             }
             endpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-            if endpoint.last != "/" {
-                endpoint += "/"
-            }
-            guard let endpointURL = URL(string: endpoint),
-                endpointURL.isSecure else {
+            guard var endpointURL = URL(string: endpoint), endpointURL.isSecure else {
                     return completion(PaymentError.noPaymentProvider, nil)
+            }
+            
+            if endpointURL.absoluteString.last != "/" {
+                endpointURL.appendPathComponent("/")
             }
             
             // If we have an old payment provider for this repo, deregister it from the DownloadManager
@@ -90,7 +110,7 @@ class PaymentManager {
         }.resume()
     }
     
-    func getPaymentProvider(for endpoint: String) -> PaymentProvider? {
+    func getPaymentProviderCache(for endpoint: String) -> PaymentProvider? {
         paymentProvidersForEndpoint.first(where: { key, _ in endpoint.hasPrefix(key) })?.value
     }
 }

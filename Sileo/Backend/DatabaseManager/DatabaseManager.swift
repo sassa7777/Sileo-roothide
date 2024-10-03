@@ -166,7 +166,7 @@ class DatabaseManager {
             let package = Expression<String>("package")
             let userRead = Expression<Int64>("userRead")
             
-            let stub = packages.filter(package == dataPackage.packageID)
+            let stub = packages.filter(package == dataPackage.package)
             do {
                 try database.run(stub.update(userRead <- 1))
             } catch {

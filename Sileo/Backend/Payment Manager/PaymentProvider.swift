@@ -12,9 +12,9 @@ import Evander
 
 enum PaymentStatus: Int {
     case immediateSuccess = 0
-    case actionRequred = 1
+    case actionRequired = 1
     case failed = -1
-    case cancel = -2
+//    case cancel = -2
 }
 
 class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
@@ -33,7 +33,7 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
         self.repoURL = repoURL
         
         loadCache()
-        fetchUserInfo(fromCache: true, completion: nil)
+//async?        fetchUserInfo(fromCache: true, completion: nil)
     }
     
     func hash(into hasher: inout Hasher) {
@@ -50,7 +50,7 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
                 let jsonData = try Data(contentsOf: self.cache)
                 let cacheInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as? [String: AnyObject]
                 self.info = cacheInfo?["info"] as? [String: AnyObject]
-                self.info = cacheInfo?["userInfo"] as? [String: AnyObject]
+                self.storedUserInfo = cacheInfo?["userInfo"] as? [String: AnyObject]
             } catch { }
         }
     }
@@ -96,10 +96,14 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
         }
         
         getRequest(withPath: "info") { error, data in
-            guard error == nil,
-                let data = data else {
-                    completion?(error, nil)
-                    return
+            NSLog("SileoLog: provider.fetchInfo \(self.baseURL) -> \(data) error=\(error)")
+            if let error = error {
+                completion?(error, nil)
+                return
+            }
+            guard let data = data else {
+                completion?(.invalidResponse, nil)
+                return
             }
             // Check we got our required values
             if data["name"] as? String == nil || data["description"] as? String == nil {
@@ -131,10 +135,14 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
         }
         
         postRequest(withPath: "user_info", includeToken: true, includePaymentSecret: false) { error, data, _ in
-            guard error == nil,
-                let data = data else {
-                    completion?(error, nil)
-                    return
+            NSLog("SileoLog: provider.fetchUserInfo \(self.baseURL) -> \(data) error=\(error)")
+            if let error = error {
+                completion?(error, nil)
+                return
+            }
+            guard let data = data else {
+                completion?(.invalidResponse, nil)
+                return
             }
             // Check we got our required values
             guard data["items"] as? [AnyObject] != nil,
@@ -180,11 +188,17 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
         let encodedIdentifier = id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? id
         let path = String(format: "package/%@/info", encodedIdentifier)
         postRequest(withPath: path, includeToken: true, includePaymentSecret: false) { error, data, _ in
-            guard error == nil,
-                let data = data else {
-                    return completion(error, nil)
+            NSLog("SileoLog: PaymentProvider.getPackageInfo \(id) = \(data), error=\(error)")
+            if let error = error {
+                return completion(error, nil)
             }
-            completion(nil, PaymentPackageInfo(dictionary: data))
+            guard let data = data else {
+                return completion(.invalidResponse, nil)
+            }
+            guard let info = PaymentPackageInfo(dictionary: data) else {
+                return completion(PaymentError(message: data.description), nil)
+            }
+            return completion(nil, info)
         }
     }
     
@@ -192,25 +206,30 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
         let encodedIdentifier = id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? id
         let path = String(format: "package/%@/purchase", encodedIdentifier)
         postRequest(withPath: path, includeToken: true, includePaymentSecret: true) { error, data, cancel in
+            NSLog("SileoLog: initiatePurchase package=\(id) cancel=\(cancel) data=\(data) error=\(error)")
+
             if cancel {
-                return completion(nil, PaymentStatus.cancel, nil)
+//                completion(nil, PaymentStatus.cancel, nil)
+                return
             }
-            guard error == nil,
-                let data = data else {
-                    return completion(error, .failed, nil)
+            if let error = error {
+                return completion(error, .failed, nil)
+            }
+            guard let data = data else {
+                return completion(.invalidResponse, .failed, nil)
             }
             // Check we got our required values
-            guard let status = data["status"] as? Int else {
-                return completion(PaymentError.invalidResponse, .failed, nil)
+            if let status = data["status"] as? Int, let pstatus = PaymentStatus(rawValue: status) {
+                if pstatus == .actionRequired {
+                    if let url = data["url"] as? String, let actionURL = URL(string: url) {
+                        return completion(nil, pstatus, actionURL)
+                    }
+                } else if pstatus == .immediateSuccess {
+                    return completion(nil, pstatus, nil)
+                }
             }
             
-            // Get and check validity of status
-            if status < PaymentStatus.failed.rawValue || status > PaymentStatus.actionRequred.rawValue {
-                return completion(PaymentError.invalidResponse, .failed, nil)
-            }
-            
-            let actionURL = URL(string: data["url"] as? String ?? "")
-            completion(nil, PaymentStatus(rawValue: status) ?? PaymentStatus.failed, actionURL)
+            return completion(PaymentError(message: data.debugDescription), .failed, nil)
         }
     }
     
@@ -230,9 +249,12 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
         let path = String(format: "package/%@/authorize_download", encodedIdentifier)
         let body = ["version": package.version as AnyObject, "repo": repo.repoURL as AnyObject, "architecture": (package.architecture ?? "iphoneos-arm") as AnyObject]
         postRequest(withPath: path, includeToken: true, includePaymentSecret: false, body: body) { error, data, _ in
-            guard error == nil,
-                let data = data else {
-                    return completionHandler(error?.message, nil)
+            NSLog("SileoLog: authorize_download \(package.package) -> \(data), error=\(error)")
+            if let error = error {
+                return completionHandler(error.message, nil)
+            }
+            guard let data = data else {
+                return completionHandler(PaymentError.invalidResponse.message, nil)
             }
             
             guard let urlStr = data["url"] as? String,
@@ -328,11 +350,19 @@ class PaymentProvider: Hashable, Equatable, DownloadOverrideProviding {
     }
     
     static func makeRequest(_ request: URLRequest, completion: @escaping (PaymentError?, [String: AnyObject]?) -> Void) {
-        URLSession.shared.dataTask(with: request, completionHandler: { data, _, error in
+        URLSession.shared.dataTask(with: request, completionHandler: { data, reponse, error in
             // Check if response had error, return error
-            guard error == nil,
-                let data = data else {
-                    return completion(PaymentError(error: error), nil)
+            if let error = error {
+                return completion(PaymentError(error: error), nil)
+            }
+            guard let reponse=reponse as? HTTPURLResponse else {
+                return completion(.invalidResponse, nil)
+            }
+            guard reponse.statusCode == 200 else {
+                return completion(PaymentError(message: "statusCode=\(reponse.statusCode)"), nil)
+            }
+            guard let data = data else {
+                return completion(.invalidResponse, nil)
             }
             
             // Decode JSON

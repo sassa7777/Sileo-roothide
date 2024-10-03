@@ -33,6 +33,12 @@ final class RepoManager {
 
     private(set) var repoList: [Repo] = []
     private var repoListLock = DispatchSemaphore(value: 1)
+    
+    public func sortedRepoList() -> [Repo] {
+        return repoList.sorted(by: { obj1, obj2 -> Bool in
+            return obj1.repoName.localizedCaseInsensitiveCompare(obj2.repoName) == .orderedAscending
+        })
+    }
 
     public func update(_ repo: Repo) {
         repoDatabase.async(flags: .barrier) {
@@ -86,6 +92,14 @@ final class RepoManager {
             ])
         }
     }
+    
+    private func normalizeURL(_ url: URL) -> URL? {
+        var normalizedStr = url.absoluteString
+        if normalizedStr.last != "/" {
+            normalizedStr.append("/")
+        }
+        return URL(string: normalizedStr)
+    }
 
     @discardableResult func addRepos(with urls: [URL]) -> [Repo] {
         var repos = [Repo]()
@@ -129,11 +143,7 @@ final class RepoManager {
         }
 
         for url in urls {
-            var normalizedStr = url.absoluteString
-            if normalizedStr.last != "/" {
-                normalizedStr.append("/")
-            }
-            guard let normalizedURL = URL(string: normalizedStr) else {
+            guard let normalizedURL = normalizeURL(url) else {
                 continue
             }
 
@@ -141,7 +151,7 @@ final class RepoManager {
             repoListLock.wait()
             if !handleDistRepo(url) {
                 let repo = Repo()
-                repo.rawURL = normalizedStr
+                repo.rawURL = normalizedURL.absoluteString
                 repo.suite = "./"
                 repo.rawEntry = """
                 Types: deb
@@ -159,8 +169,10 @@ final class RepoManager {
         return repos
     }
     
-    public func shouldAddRepo(_ url: URL) -> Bool {
-        guard !hasRepo(with: url) else { return false }
+    private func shouldAddRepo(_ url: URL, _ suite: String="./", _ components: [String]=[]) -> Bool {
+        let components = components.filter({$0.isEmpty==false})
+        
+        guard !hasRepo(with: url, suite: suite, components: components) else { return false }
         #if targetEnvironment(macCatalyst)
         return true
         #else
@@ -176,25 +188,40 @@ final class RepoManager {
     }
 
     public func addDistRepo(url: URL, suites: String, components: String) -> Repo? {
-        var normalizedStr = url.absoluteString
-        if normalizedStr.last != "/" {
-            normalizedStr.append("/")
-        }
-        guard let normalizedURL = URL(string: normalizedStr) else {
+        NSLog("SileoLog: addDistRepo \(url) : \(suites) : \(components)")
+
+        assert((url.host?.count ?? 0) > 0)
+        assert(["http","https"].contains(url.scheme?.lowercased()))
+        
+        var suites = suites.trimmingCharacters(in: .whitespaces)
+        if suites.isEmpty { suites = "./" }
+        let suitesArray = suites.components(separatedBy: .whitespaces).filter({$0.isEmpty==false})
+        guard suitesArray.count <= 1 else {
             return nil
         }
         
-        guard shouldAddRepo(normalizedURL) else { return nil }
+        let components = components.trimmingCharacters(in: .whitespaces)
+        let componentsArray = components.components(separatedBy: .whitespaces).filter({$0.isEmpty==false})
+        guard componentsArray.count <= 1 else {
+            return nil
+        }
+        
+        NSLog("SileoLog: \(suites=="./") || \(componentsArray.isEmpty)")
+        guard ((suites=="./" ? 1:0) ^ (componentsArray.isEmpty ? 1:0)) == 0 else {
+            return nil
+        }
+        
+        guard let normalizedURL = normalizeURL(url) else {
+            return nil
+        }
+        
+        guard shouldAddRepo(normalizedURL, suites, componentsArray) else { return nil }
 
         repoListLock.wait()
         let repo = Repo()
-        var suites = suites
-        if suites.isEmpty {
-            suites = "./"
-        }
-        repo.rawURL = normalizedStr
+        repo.rawURL = normalizedURL.absoluteString
         repo.suite = suites
-        repo.components = components.split(separator: " ") as? [String] ?? [components]
+        repo.components = componentsArray
         repo.rawEntry = """
         Types: deb
         URIs: \(repo.rawURL)
@@ -231,52 +258,62 @@ final class RepoManager {
         remove(repos: [repo])
     }
 
-    func repo(with url: URL) -> Repo? {
-        var normalizedStr = url.absoluteString.lowercased()
-        if normalizedStr.last != "/" {
-            normalizedStr.append("/")
-        }
-        normalizedStr = normalizedStr.replacingOccurrences(of: "https://", with: "")
-        normalizedStr = normalizedStr.replacingOccurrences(of: "http://", with: "")
-        return repoList.first(where: {
-            var repoNormalizedStr = $0.rawURL.lowercased()
-            if repoNormalizedStr.last != "/" {
-                repoNormalizedStr.append("/")
+    func repo(with repo: Repo) -> Repo? {
+        defer { repoListLock.signal() }
+        repoListLock.wait()
+        for repo2 in repoList {
+            if repo2.rawURL==repo.rawURL && repo2.suite==repo.suite && Set(repo2.components)==Set(repo.components) {
+                return repo2
             }
-            repoNormalizedStr = repoNormalizedStr.replacingOccurrences(of: "https://", with: "")
-            repoNormalizedStr = repoNormalizedStr.replacingOccurrences(of: "http://", with: "")
-            return repoNormalizedStr == normalizedStr
-        })
+        }
+        return nil
+    }
+    
+    func repo(with url: URL, suite: String="./", components: [String]?=[]) -> Repo? {
+        let components = components?.filter({$0.isEmpty==false}) ?? []
+        let url = normalizeURL(url)!
+        defer { repoListLock.signal() }
+        repoListLock.wait()
+        
+        for repo in repoList {
+            if repo.rawURL == url.absoluteString && repo.suite==suite && Set(repo.components)==Set(components) {
+                return repo
+            }
+        }
+        return nil
     }
 
     func repo(withSourceFile sourceFile: String) -> Repo? {
         repoList.first { $0.rawEntry == sourceFile }
     }
 
-    func hasRepo(with url: URL) -> Bool {
-        if url.host?.lowercased() == "apt.bigboss.org" ||
-            url.host?.lowercased() == "bigboss.org" ||
-            url.host?.lowercased() == "apt.thebigboss.org" ||
-            url.host?.lowercased() == "thebigboss.org" {
-            let repo = self.repo(with: URL(string: "http://apt.thebigboss.org/repofiles/cydia/")!)
-            return repo != nil
+    func hasRepo(with url: URL, suite: String="./", components: [String]?=[]) -> Bool {
+        let components = components?.filter({$0.isEmpty==false}) ?? []
+        let url = normalizeURL(url)!
+        defer { repoListLock.signal() }
+        repoListLock.wait()
+        
+        for repo in repoList {
+            if repo.rawURL == url.absoluteString && repo.suite==suite && Set(repo.components)==Set(components) {
+                NSLog("SileoLog: hasRepo \(url)=\(repo.rawURL), \(suite)=\(repo.suite), \(components)=\(repo.components)")
+                return true
+            }
         }
-        if url.host?.lowercased() == "apt.procurs.us" {
-            let repo = self.repo(with: URL(string: "https://apt.procurs.us/")!)
-            return repo != nil
-        }
-        let repo = self.repo(with: url)
-        return repo != nil
+        return false
     }
 
     private func parseRepoEntry(_ repoEntry: String, at url: URL, withTypes types: [String], uris: [String], suites: [String], components: [String]?) {
+        let components = components?.filter({$0.isEmpty==false}) ?? []
+        
         guard types.contains("deb") else {
             return
         }
 
         for repoURL in uris {
-            guard !hasRepo(with: URL(string: repoURL)!)
-            else {
+            guard let _repoURL = URL(string: repoURL), ["http","https"].contains(_repoURL.scheme?.lowercased()), _repoURL.host != nil else {
+                continue
+            }
+            guard !hasRepo(with: url, suite: suites[0], components: components) else {
                 continue
             }
 
@@ -291,7 +328,7 @@ final class RepoManager {
                     suite = "./"
                 }
                 repo.suite = suite
-                repo.components = components ?? []
+                repo.components = components
                 repo.entryFile = url.absoluteString
                 return repo
             }
@@ -347,21 +384,32 @@ final class RepoManager {
 
     private func _checkUpdatesInBackground(_ repos: [Repo]) {
         NSLog("SileoLog: _checkUpdatesInBackground \(repos)")
+        defer {
+            NSLog("SileoLog: _checkUpdatesInBackground finished")
+        }
+
+        let iconQueue = OperationQueue()
+        iconQueue.maxConcurrentOperationCount = 10
+
+        let dispatchGroup = DispatchGroup()
+        dispatchGroup.notify(queue: .global()) {
+            NSLog("SileoLog: _checkUpdatesInBackground background finished")
+        }
 
         for repo in repos {
             
-            NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(repo.isLoaded) \(cacheFile(named: "Release", for: repo)) \(cacheFile(named: "Release", for: repo).aptContents)")
+//            NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(repo.isLoaded) \(cacheFile(named: "Release", for: repo)) \(cacheFile(named: "Release", for: repo).aptContents)")
             if !repo.isLoaded {
                 let releaseFile = cacheFile(named: "Release", for: repo)
                 if let info = releaseFile.aptContents,
                     let release = try? ControlFileParser.dictionary(controlFile: info, isReleaseFile: true).0,
                     let repoName = release["origin"] {
                     repo.repoName = repoName
-                    NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(repo.repoName)")
+//                    NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(repo.repoName)")
                     let links = dataDetector.matches(
                         in: repo.repoName, range: NSRange(repoName.startIndex..<repoName.endIndex, in: repoName)
                     )
-                    NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(links)")
+//                    NSLog("SileoLog: _checkUpdatesInBackground \(repo.url) \(links)")
                     if !links.isEmpty {
                         repo.repoName = ""
                     }
@@ -373,7 +421,11 @@ final class RepoManager {
 
             if !repo.isIconLoaded {
 
-                DispatchQueue.global().async {
+                //prevent hundreds of repos drain/block the Global Dispatch Queue
+                //DispatchQueue.global().async {
+                dispatchGroup.enter()
+                iconQueue.addOperation {
+                    defer { dispatchGroup.leave() }
                     @discardableResult func image(for url: URL, scale: CGFloat) -> Bool {
                         let cache = EvanderNetworking.imageCache(url, scale: scale)
                         if let image = cache.1 {
@@ -470,7 +522,6 @@ final class RepoManager {
         }
         task.errorCallback = { task, status, error, url in
             NSLog("SileoLog: errorCallback=\(status) request=\(request) url=\(url) error=\(error)")
-//            Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
 
             if let url = url {
                 try? FileManager.default.removeItem(at: url)
@@ -616,9 +667,7 @@ final class RepoManager {
 
         var errorsFound = false
         let listlock = NSLock()
-        var repos = repos.sorted(by: { obj1, obj2 -> Bool in
-            obj1.repoName.localizedCaseInsensitiveCompare(obj2.repoName) == .orderedAscending
-        })
+        var repos = self.sortedRepoList()
         
         for repo in repos {
             repo.startedRefresh = true
@@ -1062,7 +1111,7 @@ final class RepoManager {
                                 let packageDict = repo.packageDict
                                 repo.packageDict = PackageListManager.readPackages(repoContext: repo, packagesFile: packagesFile.url)
                                 let databaseChanges = Array(repo.packageDict.values).filter { package -> Bool in
-                                    if let tmp = packageDict[package.packageID] {
+                                    if let tmp = packageDict[package.package] {
                                         if tmp.version == package.version {
                                             return false
                                         }
@@ -1266,9 +1315,9 @@ final class RepoManager {
         }
         guard let rawList = try? String(contentsOf: url) else { return }
 
-        let repoEntries = rawList.components(separatedBy: "\n")
+        let repoEntries = rawList.components(separatedBy: .newlines)
         for repoEntry in repoEntries {
-            let parts = repoEntry.components(separatedBy: " ")
+            let parts = repoEntry.trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).filter({$0.isEmpty==false})
             guard parts.count >= 3 else {
                 continue
             }
@@ -1286,9 +1335,19 @@ final class RepoManager {
         guard let rawSources = try? String(contentsOf: url) else {
             return
         }
-        let urlsString = rawSources.components(separatedBy: "\n").filter { URL(string: $0) != nil }
-
-        parseRepoEntry(rawSources, at: url, withTypes: ["deb"], uris: urlsString, suites: ["./"], components: [])
+        
+        for source in rawSources.components(separatedBy: .newlines) {
+            let parts = source.trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).filter({$0.isEmpty==false})
+            
+            let uri = parts[0]
+            
+            guard let _ = URL(string: uri) else { continue }
+            
+            let suite = (parts.count > 1) ? parts[1] : "./"
+            let components = (parts.count > 2) ? Array(parts[2...]) : nil
+            
+            parseRepoEntry(rawSources, at: url, withTypes: ["deb"], uris: [uri], suites: [suite], components: components)
+        }
     }
     
     public func parseSourcesFile(at url: URL) {
@@ -1393,5 +1452,38 @@ final class RepoManager {
         }
         
         repoListLock.signal()
+    }
+    
+    public func getUniqueName(repo: Repo) -> String {
+        defer { repoListLock.signal() }
+        repoListLock.wait()
+        
+        var uniqueUrl: String = repo.displayURL
+        
+        for repo2 in self.repoList {
+            if repo.displayURL == repo2.displayURL && repo != repo2 {
+                uniqueUrl = repo.url?.absoluteString ?? "?"
+                break
+            }
+        }
+        
+        for repo2 in self.repoList {
+            if repo.url == repo2.url && repo != repo2 {
+                uniqueUrl = repo.primaryComponentURL?.absoluteString ?? "?"
+                break
+            }
+        }
+        
+        if repo.repoName.isEmpty {
+            return uniqueUrl
+        }
+        
+        for repo2 in self.repoList {
+            if repo.repoName == repo2.repoName && repo != repo2  {
+                return uniqueUrl
+            }
+        }
+
+        return repo.repoName
     }
 }

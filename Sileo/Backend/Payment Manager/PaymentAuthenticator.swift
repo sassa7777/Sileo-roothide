@@ -15,13 +15,15 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
     private var currentAuthenticationSession: NSObject?
     private var lastWindow: UIWindow?
     
+    //login the repo
     func authenticate(provider: PaymentProvider, window: UIWindow?, completion: ((PaymentError?, Bool) -> Void)?) {
+        NSLog("SileoLog: authenticate \(provider.baseURL)")
         let callback: (URL?, Error?) -> Void = { url, error in
             if #available(iOS 12, macCatalyst 12, *) {
                 if let error = error {
                     if let error = error as? ASWebAuthenticationSessionError,
                         error.code == ASWebAuthenticationSessionError.canceledLogin {
-                        completion?(nil, false)
+//                        completion?(nil, false)
                         return
                     }
                     completion?(PaymentError(error: error), false)
@@ -32,7 +34,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
                 if let error = error {
                     if let error = error as? SFAuthenticationError,
                        error.code == SFAuthenticationError.canceledLogin {
-                        completion?(nil, false)
+//                        completion?(nil, false)
                         return
                     }
                     completion?(PaymentError(error: error), false)
@@ -68,7 +70,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
             }
             
             provider.authenticate(withToken: token!, paymentSecret: secret!)
-            completion?(nil, false)
+            completion?(nil, true)
         }
         
         if #available(iOS 12, macCatalyst 12, *) {
@@ -92,7 +94,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
                 if let error = error {
                     if let error = error as? ASWebAuthenticationSessionError,
                        error.code == ASWebAuthenticationSessionError.canceledLogin {
-                        completion?(nil, false)
+//                        completion?(nil, false)
                         return
                     }
                     completion?(PaymentError(error: error), false)
@@ -103,7 +105,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
                 if let error = error {
                     if let error = error as? SFAuthenticationError,
                        error.code == SFAuthenticationError.canceledLogin {
-                        completion?(nil, false)
+//                        completion?(nil, false)
                         return
                     }
                     completion?(PaymentError(error: error), false)
@@ -117,7 +119,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
                     return
             }
             
-            completion?(nil, false)
+            completion?(nil, true)
         }
         if #available(iOS 12, macCatalyst 12, *) {
             let currentSession = ASWebAuthenticationSession(url: url, callbackURLScheme: "sileo", completionHandler: callback)

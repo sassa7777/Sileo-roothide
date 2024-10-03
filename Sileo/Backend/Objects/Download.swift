@@ -22,8 +22,10 @@ final class Download {
     var completed = false
     var started = false
     var message: String?
+    var session: UInt32
     
-    init(package: Package) {
+    init(package: Package, session: UInt32) {
         self.package = package
+        self.session = session
     }
 }

@@ -16,7 +16,7 @@ enum APTParserErrors: LocalizedError {
     
     var errorDescription: String? {
         switch self {
-        case .blankJsonOutput(let error): return "APT was unable to find this package. Please try refreshing your sources\n \(error)"
+        case .blankJsonOutput(let error): return "APT was unable to find this package. Please try refreshing your sources\n\n\(error)"
         case .failedDataEncoding(let data): return "APT returned an invalid response that cannot be parsed.\n\n\(data ?? "")"
         case .missingSileoConf: return "Your Sileo install is incomplete. Please reinstall"
         case .blankRequest: return "Internal Error: Blank Request sent for packages"
@@ -157,7 +157,7 @@ struct ErrorParserWrapper: Decodable {
 extension APTWrapper {
     // APT syntax: a- = remove a; b = install b
     public class func operationList(installList: Set<DownloadPackage>, removeList: Set<DownloadPackage>) throws -> APTOutput {
-        //Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
+//        Thread.callStackSymbols.forEach{NSLog("SileoLog: operationList callstack=\($0)")}
 
         // Error check stuff
         guard !(installList.isEmpty && removeList.isEmpty) else {
@@ -183,20 +183,18 @@ extension APTWrapper {
         ]
         var packageOperations: [String] = []
         for downloadPackage in installList {
-            // The downloadPackage.package.package is the deb path on local installs
-            // if it has a / that means it's the path which is a local install
-            if downloadPackage.package.package.contains("/") {
                 // APT will take the raw package path for install
-                packageOperations.append((downloadPackage.package.debPath != nil) ? rootfs(downloadPackage.package.debPath!) : rootfs(downloadPackage.package.package) )
+            if let local_deb = downloadPackage.package.local_deb {
+                packageOperations.append(rootfs(local_deb))
             } else {
                 // Force the exact version of the package we downloaded from the repository
-                packageOperations.append("\(downloadPackage.package.packageID)=\(downloadPackage.package.version)")
+                packageOperations.append("\(downloadPackage.package.package)=\(downloadPackage.package.version)")
             }
         }
 
         for downloadPackage in removeList {
             // Adding '-' after the packageID will query for removal
-            packageOperations.append("\(downloadPackage.package.packageID)-")
+            packageOperations.append("\(downloadPackage.package.package)-")
         }
 
         // APT spawn stuff

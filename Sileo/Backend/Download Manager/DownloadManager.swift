@@ -19,13 +19,13 @@ public enum DownloadManagerQueue: Int {
 }
 
 final class DownloadManager {
-    static let lockStateChangeNotification = Notification.Name("SileoDownloadManagerLockStateChanged")
+    public static let lockStateChangeNotification = Notification.Name("SileoDownloadManagerLockStateChanged")
     
-    public static let queueContext = 50
-    public static let queueKey = DispatchSpecificKey<Int>()
-    static let aptQueue: DispatchQueue = {
+    private static let aptQueueContext = 50
+    private static let aptQueueKey = DispatchSpecificKey<Int>()
+    public static let aptQueue: DispatchQueue = {
         let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInitiated)
-        queue.setSpecific(key: DownloadManager.queueKey, value: DownloadManager.queueContext)
+        queue.setSpecific(key: aptQueueKey, value: aptQueueContext)
         return queue
     }()
     
@@ -58,38 +58,43 @@ final class DownloadManager {
         }
     }
     
-    static let shared = DownloadManager()
+    public static let shared = DownloadManager()
     
     public var lockedForInstallation = false {
         didSet {
+            NSLog("SileoLog: lockedForInstallation: \(oldValue) -> \(lockedForInstallation)")
             // NotificationCenter.default.post(name: DownloadManager.lockStateChangeNotification, object: nil)
         }
     }
+    
+    public var queueStarted = false
     public var totalProgress = CGFloat(0)
     
-    public static let dataQueueContext = 50
-    public static let dataQueueKey = DispatchSpecificKey<Int>()
-    static let dataQueue: DispatchQueue = {
+    private static let dataQueueContext = 50
+    private static let dataQueueKey = DispatchSpecificKey<Int>()
+    private static let dataQueue: DispatchQueue = {
         let queue = DispatchQueue(label: "Sileo.dataQueue", qos: .userInitiated)
-        queue.setSpecific(key: DownloadManager.queueKey, value: DownloadManager.queueContext)
+        queue.setSpecific(key: dataQueueKey, value: dataQueueContext)
         return queue
     }()
     
-    var upgrades = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    var installations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    var uninstallations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    var installdeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    var uninstalldeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    var errors = SafeSet<APTBrokenPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var upgrades = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var installations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var uninstallations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var installdeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var uninstalldeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var errors = SafeSet<APTBrokenPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
     
-    private var currentDownloads = 0
-    public var queueStarted = false
-    var downloads = SafeDictionary<String,Download>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    var cachedFiles = SafeArray<URL>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var queuedDownloads = SafeDictionary<String,Download>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var cachedDownloadFiles = SafeArray<URL>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
         
-    var repoDownloadOverrideProviders = SafeDictionary<String, Set<AnyHashable>>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    public var repoDownloadOverrideProviders = SafeDictionary<String, Set<AnyHashable>>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
     
-    var viewController: DownloadsTableViewController
+    public var viewController: DownloadsTableViewController
+    
+    public var currentDownloads = 0
+    public var maxParallelDownloads = 5
+    public var currentDownloadSession:UInt32 = 0
     
     init() {
         viewController = DownloadsTableViewController(nibName: "DownloadsTableViewController", bundle: nil)
@@ -109,7 +114,7 @@ final class DownloadManager {
         
     public func downloadingPackages() -> Int {
         var downloadsCount = 0
-        for keyValue in downloads.raw where keyValue.value.progress < 1 {
+        for keyValue in queuedDownloads.raw where keyValue.value.progress < 1 {
             downloadsCount += 1
         }
         return downloadsCount
@@ -117,7 +122,7 @@ final class DownloadManager {
     
     public func readyPackages() -> Int {
         var readyCount = 0
-        for keyValue in downloads.raw {
+        for keyValue in queuedDownloads.raw {
             let download = keyValue.value
             if download.progress == 1 && download.success == true {
                 readyCount += 1
@@ -129,13 +134,19 @@ final class DownloadManager {
     public func verifyComplete() -> Bool {
         let allRawDownloads = upgrades.raw.union(installations.raw).union(installdeps.raw)
         for dlPackage in allRawDownloads {
-            guard let download = downloads[dlPackage.package.packageID],
+            guard let download = queuedDownloads[dlPackage.package.package],
                   download.success else { return false }
         }
         return true
     }
     
-    func startPackageDownload(download: Download) {
+    private func startPackageDownload(download: Download) {
+        NSLog("SileoLog: startPackageDownload \(download.package.package)")
+        
+        guard download.session == self.currentDownloadSession else {
+            return
+        }
+        
         let package = download.package
         var filename = package.filename ?? ""
         
@@ -144,8 +155,8 @@ final class DownloadManager {
             packageRepo = repo
         }
         
-        if package.package.contains("/") {
-            filename = URL(fileURLWithPath: package.package).absoluteString
+        if let local_deb = package.local_deb {
+            filename = URL(fileURLWithPath: local_deb).absoluteString
         } else if !filename.hasPrefix("https://") && !filename.hasPrefix("http://") {
             filename = URL(string: packageRepo?.rawURL ?? "")?.appendingPathComponent(filename).absoluteString ?? ""
         }
@@ -159,7 +170,7 @@ final class DownloadManager {
                 if self.verifyComplete() {
                     self.viewController.reloadControlsOnly()
                 } else {
-                    NSLog("SileoLog: startMoreDownloads4")
+                    NSLog("SileoLog: startMoreDownloads (startPackageDownload) 1")
                     startMoreDownloads()
                 }
             }
@@ -189,31 +200,60 @@ final class DownloadManager {
             let downloadURL = url ?? URL(string: filename)
             download.started = true
             download.failureReason = nil
-            download.task = RepoManager.shared.queue(from: downloadURL, progress: { task, progress in
+            download.task = RepoManager.shared.queue(from: downloadURL, progress: { task, progress in DispatchQueue.main.async {
+                //now in main queue
+                NSLog("SileoLog: download progress \(task.task)")
+                //in main queue (sync with UI), check task cancelled
+                guard task.task != nil else {
+                    return
+                }
+                guard download.session == self.currentDownloadSession else {
+                    return
+                }
+                
                 download.message = nil
                 download.progress = CGFloat(progress.fractionCompleted)
                 download.totalBytesWritten = progress.total
                 download.totalBytesExpectedToWrite = progress.expected
-                DispatchQueue.main.async {
-                    self.viewController.reloadDownload(package: package)
+                
+                self.viewController.reloadDownload(package: package)
+                
+            }}, success: { task, status, fileURL in DispatchQueue.main.async {
+                //now in main queue
+                NSLog("SileoLog: download success \(task.task)")
+
+                //in main queue (sync with UI), check task cancelled
+                guard task.task != nil else {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    return
                 }
-            }, success: { task, status, fileURL in
+                guard download.session == self.currentDownloadSession else {
+                    return
+                }
+                
                 self.currentDownloads -= 1
                 let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
                 let fileSize = attributes?[FileAttributeKey.size] as? Int
                 let fileSizeStr = String(format: "%ld", fileSize ?? 0)
+                
                 download.message = nil
+                
                 if let backgroundTaskIdentifier = download.backgroundTask {
+                    download.backgroundTask = nil
                     UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
                 }
-                download.backgroundTask = nil
-                download.message = nil
-                if !package.package.contains("/") && (fileSizeStr != package.size) {
+                
+                if package.local_deb==nil && (fileSizeStr != package.size) {
                     download.failureReason = String(format: String(localizationKey: "Download_Size_Mismatch", type: .error),
                                                     package.size ?? "nil", fileSizeStr)
                     download.success = false
                     download.progress = 0
+                    
+                    NSLog("SileoLog: startMoreDownloads (startPackageDownload) 3")
+                    self.startMoreDownloads()
+                    
                 } else {
+                    
                     do {
                         download.success = try self.verify(download: download, fileURL: fileURL)
                     } catch let error {
@@ -226,48 +266,71 @@ final class DownloadManager {
                         download.progress = 0
                     }
                     
-                    #if TARGET_SANDBOX || targetEnvironment(simulator)
+#if TARGET_SANDBOX || targetEnvironment(simulator)
                     try? FileManager.default.removeItem(at: fileURL)
-                    #endif
+#endif
                     
-                    Self.aptQueue.async { [self] in
-                        if self.verifyComplete() {
-                            DispatchQueue.main.async {
-                                self.viewController.reloadDownload(package: download.package)
-                                TabBarController.singleton?.updatePopup()
-                                self.viewController.reloadControlsOnly()
-                            }
-                            
-                        } else {
-                            NSLog("SileoLog: startMoreDownloads5")
-                            startMoreDownloads()
-                        }
+                    var completed = false
+                    
+                    //sync not async (is this "aptQueue" necessary?)
+                    Self.aptQueue.sync {
+                        completed = self.verifyComplete()
                     }
+                    
+                    if completed {
+                        self.viewController.reloadDownload(package: download.package)
+                        TabBarController.singleton?.updatePopup()
+                        self.viewController.reloadControlsOnly()
+                    } else {
+                        NSLog("SileoLog: startMoreDownloads (startPackageDownload) 2")
+                        self.startMoreDownloads()
+                    }
+                    
                     return
                 }
-                NSLog("SileoLog: startMoreDownloads6")
-                self.startMoreDownloads()
-            }, failure: { task, statusCode, error in
+                
+            }}, failure: { task, statusCode, error in DispatchQueue.main.async {
+                //now in main queue
+                NSLog("SileoLog: download failure \(task?.task)")
+
+                //in main queue (sync with UI), check task cancelled
+                guard task?.task != nil else {
+                    return
+                }
+                guard download.session == self.currentDownloadSession else {
+                    return
+                }
+                
                 self.currentDownloads -= 1
                 download.failureReason = error?.localizedDescription ?? String(format: String(localizationKey: "Download_Failing_Status_Code", type: .error), statusCode)
                 download.message = nil
+                
                 if let backgroundTaskIdentifier = download.backgroundTask {
+                    download.backgroundTask = nil
                     UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
                 }
-                download.backgroundTask = nil
-                DispatchQueue.main.async {
-                    self.viewController.reloadDownload(package: download.package)
-                    self.viewController.reloadControlsOnly()
-                    TabBarController.singleton?.updatePopup()
-                }
-                NSLog("SileoLog: startMoreDownloads7")
+                
+                self.viewController.reloadDownload(package: download.package)
+                self.viewController.reloadControlsOnly()
+                TabBarController.singleton?.updatePopup()
+                    
+                NSLog("SileoLog: startMoreDownloads (startPackageDownload) 4")
                 self.startMoreDownloads()
-            }, waiting: { task, message in
-                download.message = message
-                DispatchQueue.main.async {
-                    self.viewController.reloadDownload(package: package)
+            }}, waiting: { task, message in DispatchQueue.main.async {
+                //now in main queue
+                NSLog("SileoLog: download waiting \(task.task)")
+
+                //in main queue (sync with UI), check task cancelled
+                guard task.task != nil else {
+                    return
                 }
-            })
+                guard download.session == self.currentDownloadSession else {
+                    return
+                }
+                
+                download.message = message
+                self.viewController.reloadDownload(package: package)
+            }})
             download.task?.resume()
             
             self.viewController.reloadDownload(package: package)
@@ -279,18 +342,18 @@ final class DownloadManager {
 //        Thread.callStackSymbols.forEach{NSLog("SileoLog: callstack=\($0)")}
         DownloadManager.aptQueue.async { [self] in
             // We don't want more than one download at a time
-            guard currentDownloads <= 3 else { return }
+            guard currentDownloads <= maxParallelDownloads else { return }
             // Get a list of downloads that need to take place
             let allRawDownloads = upgrades.raw.union(installations.raw).union(installdeps.raw)
             for dlPackage in allRawDownloads {
                 // Get the download object, we don't want to create multiple
                 let download: Download
                 let package = dlPackage.package
-                if let tmp = downloads[package.packageID] {
+                if let tmp = queuedDownloads[package.package] {
                     download = tmp
                 } else {
-                    download = Download(package: package)
-                    downloads[package.packageID] = download
+                    download = Download(package: package, session: self.currentDownloadSession)
+                    queuedDownloads[package.package] = download
                 }
                 
                 // Means download has already started / completed
@@ -298,13 +361,13 @@ final class DownloadManager {
                 download.queued = true
                 startPackageDownload(download: download)
                 
-                guard currentDownloads <= 3 else { break }
+                guard currentDownloads <= maxParallelDownloads else { break }
             }
         }
     }
  
-    public func download(package: String) -> Download? {
-        downloads[package]
+    public func queuedDownload(package: String) -> Download? {
+        queuedDownloads[package]
     }
     
     private func aptEncoded(string: String, isArch: Bool) -> String {
@@ -319,7 +382,7 @@ final class DownloadManager {
     private func verify(download: Download) -> Bool {
         let package = download.package
         
-        let packageID = aptEncoded(string: package.packageID, isArch: false)
+        let packageID = aptEncoded(string: package.package, isArch: false)
         let version = aptEncoded(string: package.version, isArch: false)
         let architecture = aptEncoded(string: package.architecture ?? "", isArch: true)
         
@@ -327,10 +390,10 @@ final class DownloadManager {
         let destURL = URL(fileURLWithPath: destFileName)
         
         if !FileManager.default.fileExists(atPath: destFileName) {
-            if package.package.contains("/") {
-                moveFileAsRoot(from: URL(fileURLWithPath: package.package), to: URL(fileURLWithPath: destFileName))
-                DownloadManager.shared.cachedFiles.append(URL(fileURLWithPath: package.package))
-                package.debPath = destFileName
+            if let local_deb = package.local_deb {
+                moveFileAsRoot(from: URL(fileURLWithPath: local_deb), to: URL(fileURLWithPath: destFileName))
+                DownloadManager.shared.cachedDownloadFiles.append(URL(fileURLWithPath: local_deb))
+                package.local_deb = destFileName
                 return FileManager.default.fileExists(atPath: destFileName)
             }
             return false
@@ -338,7 +401,7 @@ final class DownloadManager {
         
         let packageControl = package.rawControl
         
-        if !package.package.contains("/") {
+        if package.local_deb==nil {
             let supportedHashTypes = PackageHashType.allCases.compactMap { type in packageControl[type.rawValue].map { (type, $0) } }
             let packageContainsHashes = !supportedHashTypes.isEmpty
             
@@ -362,7 +425,7 @@ final class DownloadManager {
         let package = download.package
         let packageControl = package.rawControl
         
-        if !package.package.contains("/") {
+        if package.local_deb==nil {
             let supportedHashTypes = PackageHashType.allCases.compactMap { type in packageControl[type.rawValue].map { (type, $0) } }
             let packageContainsHashes = !supportedHashTypes.isEmpty
             
@@ -391,7 +454,7 @@ final class DownloadManager {
         }
         
         #if !TARGET_SANDBOX && !targetEnvironment(simulator)
-        let packageID = aptEncoded(string: package.packageID, isArch: false)
+        let packageID = aptEncoded(string: package.package, isArch: false)
         let version = aptEncoded(string: package.version, isArch: false)
         let architecture = aptEncoded(string: package.architecture ?? "", isArch: true)
         
@@ -400,12 +463,13 @@ final class DownloadManager {
 
         moveFileAsRoot(from: fileURL, to: destURL)
         #endif
-        DownloadManager.shared.cachedFiles.append(fileURL)
+        DownloadManager.shared.cachedDownloadFiles.append(fileURL)
         return true
     }
     
     //running in aptQueue
     private func recheckTotalOps() throws {
+        NSLog("SileoLog: recheckTotalOps")
         if Thread.isMainThread {
             fatalError("This cannot be called from the main thread!")
         }
@@ -448,7 +512,7 @@ final class DownloadManager {
         var uninstallations = uninstallations.raw
         let rawUninstalls = PackageListManager.shared.packages(identifiers: uninstallIdentifiers, sorted: false, packages: Array(PackageListManager.shared.installedPackages.values))
         guard rawUninstalls.count == uninstallIdentifiers.count else {
-            rawUninstalls.map({NSLog("SileoLog: rawUninstalls=\($0.packageID) \($0.package)")})
+            rawUninstalls.map({NSLog("SileoLog: rawUninstalls=\($0.package) \($0.package)")})
             uninstallIdentifiers.map({NSLog("SileoLog: uninstallIdentifiers=\($0)")})
             throw APTParserErrors.blankJsonOutput(error: "Uninstall Identifiers Mismatch")
         }
@@ -486,6 +550,7 @@ final class DownloadManager {
                             if localPackage.version == aptPackage.1 {
                                 rawInstalls.append(localPackage)
                                 installIdentifiers.removeAll { $0 == aptPackage.0 }
+                                NSLog("SileoLog: local package=\(localPackage.package),\(localPackage.version),\(localPackage.local_deb)")
                             }
                         }
                     }
@@ -493,15 +558,15 @@ final class DownloadManager {
                     //if let repo = RepoManager.shared.repoList.first(where: {return $0.url?.host == host }) {
                     // a host may have multiple repos
                     for repo in RepoManager.shared.repoList where repo.url?.host == host {
-                        NSLog("SileoLog: package=\(aptPackage.0),\(aptPackage.1)")
+                        NSLog("SileoLog: aptPackage=\(aptPackage.0),\(aptPackage.1)")
                         if let repoPackage = repo.packageDict[aptPackage.0] {
-                            NSLog("SileoLog: repoPackage=\(repoPackage.packageID),\(repoPackage.version)")
+                            NSLog("SileoLog: repoPackage=\(repoPackage.package),\(repoPackage.version),\(repoPackage.sourceRepo?.url)")
                             if checkRootHide(repoPackage) {
                                 if repoPackage.version == aptPackage.1 {
                                     rawInstalls.append(repoPackage)
                                     installIdentifiers.removeAll { $0 == aptPackage.0 }
-                                } else if let version = repoPackage.getVersion(aptPackage.1) {
-                                    rawInstalls.append(version)
+                                } else if let versionPackage = repoPackage.getVersion(aptPackage.1) {
+                                    rawInstalls.append(versionPackage)
                                     installIdentifiers.removeAll { $0 == aptPackage.0 }
                                 }
                             }
@@ -511,30 +576,31 @@ final class DownloadManager {
             }
         }
             
-        NSLog("SileoLog: rawInstalls=\(rawInstalls)")
+        rawInstalls.map({NSLog("SileoLog: rawInstalls1: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
         rawInstalls += PackageListManager.shared.packages(identifiers: installIdentifiers, sorted: false)
-        NSLog("SileoLog: rawInstalls=\(rawInstalls)")
-        
+        rawInstalls.map({NSLog("SileoLog: rawInstalls2: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
+
         for package in rawInstalls {
             if !checkRootHide(package) {
                 let compat = APTBrokenPackage.ConflictingPackage(package:"roothide", conflict:.conflicts)
-                let brokenPackage = APTBrokenPackage(packageID: package.packageID, conflictingPackages: [compat])
+                let brokenPackage = APTBrokenPackage(packageID: package.package, conflictingPackages: [compat])
                 aptOutput.conflicts.append(brokenPackage)
 //                rawInstalls.removeAll { $0 == package}
-//                installIdentifiers.removeAll { $0 == package.packageID}
-//                installIndentifiersReference.removeAll { $0 == package.packageID}
+//                installIdentifiers.removeAll { $0 == package.package}
+//                installIndentifiersReference.removeAll { $0 == package.package}
             }
         }
         
         guard rawInstalls.count == installIndentifiersReference.count else {
-            rawUninstalls.map({NSLog("SileoLog: rawInstalls=\($0.packageID) \($0.package)")})
-            rawUninstalls.map({NSLog("SileoLog: installIndentifiersReference=\($0)")})
+            rawInstalls.map({NSLog("SileoLog: rawInstalls: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
+            installIndentifiersReference.map({NSLog("SileoLog: installIndentifiersReference=\($0)")})
             throw APTParserErrors.blankJsonOutput(error: "Install Identifier Mismatch for Identifiers")
         }
         var installDeps = Set<DownloadPackage>(rawInstalls.compactMap { DownloadPackage(package: $0) })
         var installations = installations.raw
         var upgrades = upgrades.raw
 
+        //Remove the package resolved by apt from the user-specified installation packages
         if aptOutput.conflicts.isEmpty {
             installations.removeAll { uninstallDeps.contains($0) }
             uninstallations.removeAll { installDeps.contains($0) }
@@ -555,27 +621,40 @@ final class DownloadManager {
         self.errors.setTo(Set<APTBrokenPackage>(aptOutput.conflicts))
         
         NSLog("SileoLog: upgrades=\(upgrades.count), installations=\(installations.count), installdeps=\(installdeps.count) uninstallations=\(uninstallations.count) uninstalldeps=\(uninstalldeps.count) errors=\(errors.count)")
-        for p in self.upgrades.raw { NSLog("SileoLog: upgrades: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
-        for p in self.installations.raw { NSLog("SileoLog: installations: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
-        for p in self.installdeps.raw { NSLog("SileoLog: installdeps: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
-        for p in self.uninstallations.raw { NSLog("SileoLog: uninstallations: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
-        for p in self.uninstalldeps.raw { NSLog("SileoLog: uninstalldeps: \(p.package.packageID):\(p.package.package), \(p.package.sourceRepo?.url)") }
+        for p in self.upgrades.raw { NSLog("SileoLog: self.upgrades: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.installations.raw { NSLog("SileoLog: self.installations: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.installdeps.raw { NSLog("SileoLog: self.installdeps: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.uninstallations.raw { NSLog("SileoLog: self.uninstallations: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.uninstalldeps.raw { NSLog("SileoLog: self.uninstalldeps: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
     }
     
     private func checkInstalled() {
         let installedPackages = PackageListManager.shared.installedPackages.values
         for package in installedPackages {
-            guard let newestPackage = PackageListManager.shared.newestPackage(identifier: package.package, repoContext: nil) else {
-                continue
-            }
-            let downloadPackage = DownloadPackage(package: newestPackage)
             if package.eFlag == .reinstreq {
+                guard let newestPackage = PackageListManager.shared.newestPackage(identifier: package.package, repoContext: nil) else {
+                    continue
+                }
+                
+                if !checkRootHide(newestPackage) {
+                    continue
+                }
+
+                let downloadPackage = DownloadPackage(package: newestPackage)
+                
                 if !installations.contains(downloadPackage) && !uninstallations.contains(downloadPackage) {
+                    NSLog("SileoLog: reinstreq \(downloadPackage.package)")
                     installations.insert(downloadPackage)
+                    //manually resolve package here so that apt can be able to reinstall it
+                    DownloadManager.aptQueue.async {
+                        try? DependencyResolverAccelerator.shared.getDependencies(packages: [downloadPackage.package])
+                    }
                 }
             } else if package.eFlag == .ok {
+                let downloadPackage = DownloadPackage(package: package)
                 if package.wantInfo == .deinstall || package.wantInfo == .purge || package.status == .halfconfigured {
                     if !installations.contains(downloadPackage) && !uninstallations.contains(downloadPackage) {
+                        NSLog("SileoLog: wantInfo \(downloadPackage.package.package) = \(downloadPackage.package.wantInfo.rawValue)")
                         uninstallations.insert(downloadPackage)
                     }
                 }
@@ -584,13 +663,14 @@ final class DownloadManager {
     }
     
     public func cancelDownloads() {
-        for download in downloads.raw.values {
+        for download in queuedDownloads.raw.values {
             download.task?.cancel()
             if let backgroundTaskIdentifier = download.backgroundTask {
                 UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
             }
         }
-        downloads.removeAll()
+        //how about cachedDownloadFiles?
+        queuedDownloads.removeAll()
         currentDownloads = 0
     }
     
@@ -601,13 +681,13 @@ final class DownloadManager {
         uninstalldeps.removeAll()
         uninstallations.removeAll()
         errors.removeAll()
-        for download in downloads.raw.values {
+        for download in queuedDownloads.raw.values {
             download.task?.cancel()
             if let backgroundTaskIdentifier = download.backgroundTask {
                 UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
             }
         }
-        downloads.removeAll()
+        queuedDownloads.removeAll()
         currentDownloads = 0
         self.checkInstalled()
     }
@@ -617,6 +697,7 @@ final class DownloadManager {
     }
     
     public func reloadData(recheckPackages: Bool, completion: (() -> Void)?) {
+        NSLog("SileoLog: DownloadManager.reloadData \(recheckPackages) \(completion)")
         DownloadManager.aptQueue.async { [self] in
             if recheckPackages {
                 do {
@@ -675,7 +756,7 @@ final class DownloadManager {
     }
     
     
-    public func checkRootlessV2(package: Package, fileURL: URL) {
+    private func checkRootlessV2(package: Package, fileURL: URL) {
         NSLog("SileoLog: checkRootlessV2 \(package.package) \(fileURL)")
         
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -694,8 +775,18 @@ final class DownloadManager {
             return
         }
         
-        controlFileData = controlFileData.replacingOccurrences(of: "Architecture: iphoneos-arm64", with: "Architecture: iphoneos-arm64e")
+        let pattern = "^Architecture:\\s*(.+)\\s*$"
+        let regexp = try! NSRegularExpression(pattern: pattern, options: .anchorsMatchLines)
+        let range = NSRange(location: 0, length: controlFileData.count)
+        let archNSRange = regexp.rangeOfFirstMatch(in: controlFileData, range: range)
+        guard let archRange = Range(archNSRange, in: controlFileData) else { return }
+        let archString = String(controlFileData[archRange])
+        let archStringRange = NSRange(location: 0, length: archString.count)
+        let origArch = regexp.stringByReplacingMatches(in: archString, range: archStringRange, withTemplate: "$1")
         
+        controlFileData = regexp.stringByReplacingMatches(in: controlFileData, range: range, withTemplate: "Architecture: all")
+        NSLog("SileoLog: origArch=\(origArch) controlFileData=\(controlFileData)")
+
         do {
             try controlFileData.write(toFile: controlFilePath, atomically: true, encoding: .utf8)
         } catch {
@@ -722,14 +813,14 @@ final class DownloadManager {
         }
         
         if checkRootHide(newPackage) {
-            newPackage.rootlessV2 = true
+            newPackage.origArchitecture = origArch
             self.add(package: newPackage, queue: .installations)
             self.reloadData(recheckPackages: true)
         }
     }
     
-    public func patchPackage(package: Package, fileURL: URL) {
-            let packageID = self.aptEncoded(string: package.packageID, isArch: false)
+    private func patchPackage(package: Package, fileURL: URL) {
+            let packageID = self.aptEncoded(string: package.package, isArch: false)
             let version = self.aptEncoded(string: package.version, isArch: false)
             let architecture = self.aptEncoded(string: package.architecture ?? "", isArch: true)
             
@@ -764,7 +855,7 @@ final class DownloadManager {
     }
     
     // call in main queue
-    public func downloadDeb(package: Package, msg: String, handler: @escaping ((Package,URL) -> Void)) {
+    private func downloadDeb(package: Package, msg: String, handler: @escaping ((Package,URL) -> Void)) {
         var task:EvanderDownloader?
         
         let alert = UIAlertController(title: msg, message: msg, preferredStyle: .alert)
@@ -806,8 +897,8 @@ final class DownloadManager {
             packageRepo = repo
         }
         
-        if package.package.contains("/") {
-            finishDownload(fileURL: URL(fileURLWithPath: package.package))
+        if let local_deb = package.local_deb {
+            finishDownload(fileURL: URL(fileURLWithPath: local_deb))
             return
         } else if !filename.hasPrefix("https://") && !filename.hasPrefix("http://") {
             filename = URL(string: packageRepo?.rawURL ?? "")?.appendingPathComponent(filename).absoluteString ?? ""
@@ -835,7 +926,7 @@ final class DownloadManager {
                 let fileSize = attributes?[FileAttributeKey.size] as? Int
                 let fileSizeStr = String(format: "%ld", fileSize ?? 0)
                 
-                if !package.package.contains("/") && (fileSizeStr != package.size) {
+                if package.local_deb==nil && (fileSizeStr != package.size) {
                     let failureReason = String(format: String(localizationKey: "Download_Size_Mismatch", type: .error),
                                                package.size ?? "nil", fileSizeStr)
                     updateMsg(msg: "\(failureReason)")
@@ -855,9 +946,11 @@ final class DownloadManager {
         }
     }
     
+    private var patchAlert:UIAlertController?
+    
     public func add(package: Package, queue: DownloadManagerQueue, approved: Bool = false) {
         NSLog("SileoLog: addPackage=\(package.name), queue=\(queue.rawValue), approved=\(approved) package=\(package.package), repo=\(package.sourceRepo?.url) depends=\(package.rawControl["depends"]) arch=\(package.architecture)")
-        //Thread.callStackSymbols.forEach{NSLog("SileoLog: callstack=\($0)")}
+//        Thread.callStackSymbols.forEach{NSLog("SileoLog: callstack=\($0)")}
 
         CanisterResolver.shared.ingest(packages: [package])
         
@@ -870,12 +963,12 @@ final class DownloadManager {
                     return
                 }
                 
-                DispatchQueue.main.async {
+                func showPatchAlert() {
                     NSLog("SileoLog: not updated for roothide: \(package.package) \(package.architecture)")
                     
                     let title = String(localizationKey: "Not Updated")
                     
-                    let msg = ["apt.procurs.us","ellekit.space"].contains(package.sourceRepo?.url?.host) ? String(localizationKey: "please contact @roothideDev to update it") : String(localizationKey: "You can contact the developer of this package to update it for roothide, or you can try to convert it via roothide Patcher.")
+                    let msg = ["apt.procurs.us","ellekit.space"].contains(package.sourceRepo?.url?.host) ? String(localizationKey: "please contact @roothideDev to update it") : String(localizationKey: "\(package.package)\n\nYou can contact the developer of this package to update it for roothide, or you can try to convert it via roothide Patcher.")
                     
                     let alert = UIAlertController(title: title, message: msg, preferredStyle: .alert)
                     
@@ -911,7 +1004,20 @@ final class DownloadManager {
                     while controller.presentedViewController != nil && controller.presentedViewController?.isBeingDismissed==false {
                         controller = controller.presentedViewController!
                     }
+                    assert(self.patchAlert == nil)
                     controller.present(alert, animated: true)
+                    self.patchAlert = alert
+                }
+                
+                DispatchQueue.main.async {
+                    if let patchAlert = self.patchAlert {
+                        patchAlert.dismiss(animated: true, completion: {
+                            self.patchAlert = nil
+                            showPatchAlert()
+                        })
+                    } else {
+                        showPatchAlert()
+                    }
                 }
                 return
             }
@@ -931,7 +1037,7 @@ final class DownloadManager {
         case .uninstallations:
             if approved == false && isEssential(downloadPackage.package) {
                 let message = String(format: String(localizationKey: "Essential_Warning"),
-                                     "\n\(downloadPackage.package.name ?? downloadPackage.package.packageID)")
+                                     "\n\(downloadPackage.package.name ?? downloadPackage.package.package)")
                 let alert = UIAlertController(title: String(localizationKey: "Warning"),
                                               message: message,
                                               preferredStyle: .alert)
@@ -1050,11 +1156,11 @@ final class DownloadManager {
 //            reloadNeeded = true
 //            let savedUpgrades: [(String, String)] = upgrades.map({
 //                let pkg = $0.package
-//                return (pkg.packageID, pkg.version)
+//                return (pkg.package, pkg.version)
 //            })
 //            let savedInstalls: [(String, String)] = installations.map({
 //                let pkg = $0.package
-//                return (pkg.packageID, pkg.version)
+//                return (pkg.package, pkg.version)
 //            })
 //
 //            upgrades.removeAll()
@@ -1104,7 +1210,7 @@ final class DownloadManager {
         for repo in allowedHosts {
             if let repo = RepoManager.shared.repoList.first(where: { $0.url?.host == repo }) {
                 for package in repo.packageArray where package.essential == "yes" &&
-                                                            installedPackages[package.packageID] == nil &&
+                                                            installedPackages[package.package] == nil &&
                                                             find(package: package) == .none {
                                                                 if checkRootHide(package) {
                                                                     reloadNeeded = true
@@ -1140,7 +1246,7 @@ final class DownloadManager {
         return package.essential == "yes"
     }
     
-    public func performOperations(progressCallback: @escaping (Double, Bool, String, String) -> Void,
+    private func performOperations(progressCallback: @escaping (Double, Bool, String, String) -> Void,
                                   outputCallback: @escaping (String, Int) -> Void,
                                   completionCallback: @escaping (Int, APTWrapper.FINISH, Bool) -> Void) {
         var installs = Array(installations.raw)

@@ -79,6 +79,7 @@
 		56A5989B214657A700677FCA /* ZKSwizzle.m in Sources */ = {isa = PBXBuildFile; fileRef = 56A5989A214657A700677FCA /* ZKSwizzle.m */; settings = {COMPILER_FLAGS = "-fno-objc-arc"; }; };
 		56A5989D214657BB00677FCA /* WhiteBlur.m in Sources */ = {isa = PBXBuildFile; fileRef = 56A5989C214657BB00677FCA /* WhiteBlur.m */; };
 		842F23EF2AA3251B00EE2E9A /* libroothide.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 842F23ED2AA3250800EE2E9A /* libroothide.tbd */; };
+		84588F712CAD2B2C00EBCA16 /* DepictionTableTextButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84588F702CAD2B2C00EBCA16 /* DepictionTableTextButtonView.swift */; };
 		845FA84F2BE9AC8D009C564D /* AppFileShare.m in Sources */ = {isa = PBXBuildFile; fileRef = 845FA84E2BE9AC8D009C564D /* AppFileShare.m */; };
 		845FA8522BE9AF2E009C564D /* MobileCoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 845FA8512BE9AF2E009C564D /* MobileCoreServices.framework */; };
 		84B37E1F2AFFBDFD00B2400E /* Evander in Frameworks */ = {isa = PBXBuildFile; productRef = 84B37E1E2AFFBDFD00B2400E /* Evander */; };
@@ -1294,6 +1295,7 @@
 		56A5989E2146584800677FCA /* WhiteBlur.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WhiteBlur.h; sourceTree = "<group>"; };
 		842F23ED2AA3250800EE2E9A /* libroothide.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; path = libroothide.tbd; sourceTree = "<group>"; };
 		842F23EE2AA3250800EE2E9A /* roothide.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = roothide.h; sourceTree = "<group>"; };
+		84588F702CAD2B2C00EBCA16 /* DepictionTableTextButtonView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DepictionTableTextButtonView.swift; sourceTree = "<group>"; };
 		845FA84E2BE9AC8D009C564D /* AppFileShare.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppFileShare.m; sourceTree = "<group>"; };
 		845FA8502BE9ACA3009C564D /* AppFileShare.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppFileShare.h; sourceTree = "<group>"; };
 		845FA8512BE9AF2E009C564D /* MobileCoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MobileCoreServices.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.0.sdk/System/iOSSupport/System/Library/Frameworks/MobileCoreServices.framework; sourceTree = DEVELOPER_DIR; };
@@ -2058,6 +2060,14 @@
 			path = Utils;
 			sourceTree = "<group>";
 		};
+		84588F6F2CAD2B2C00EBCA16 /* DepictionTableTextButtonView */ = {
+			isa = PBXGroup;
+			children = (
+				84588F702CAD2B2C00EBCA16 /* DepictionTableTextButtonView.swift */,
+			);
+			path = DepictionTableTextButtonView;
+			sourceTree = "<group>";
+		};
 		C315A7BC217D99C200341243 /* Base */ = {
 			isa = PBXGroup;
 			children = (
@@ -2435,6 +2445,7 @@
 		F100C2FC210D5E1E00A9B7D8 /* DepictionView */ = {
 			isa = PBXGroup;
 			children = (
+				84588F6F2CAD2B2C00EBCA16 /* DepictionTableTextButtonView */,
 				E1C90249263C74C400569D1E /* DepictionFormViewController */,
 				F147532221451C42004A122A /* DepictionAutoStackView */,
 				F100C303210D5F6300A9B7D8 /* DepictionBaseView */,
@@ -4499,6 +4510,7 @@
 				F1C5D9C922D1886E0021BD89 /* FeaturedSeparatorView.swift in Sources */,
 				F1C5D9CC22D188A50021BD89 /* FeaturedSpacerView.swift in Sources */,
 				F1C5D9D222D189650021BD89 /* FeaturedStackView.swift in Sources */,
+				84588F712CAD2B2C00EBCA16 /* DepictionTableTextButtonView.swift in Sources */,
 				F1D82F7C230959D400EECCAE /* FeaturedViewController.swift in Sources */,
 				E1C9025D263C852100569D1E /* DepictionFormTextView.swift in Sources */,
 				E13488E829CC842300B0A8D5 /* Maintainer.swift in Sources */,

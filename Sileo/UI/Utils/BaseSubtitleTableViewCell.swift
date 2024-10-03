@@ -60,12 +60,24 @@ open class BaseSubtitleTableViewCell: UITableViewCell {
         textLabelFrame.origin.y = 9
         detailTextLabelFrame.origin.y = 30
         
-        if icon != nil {
-            textLabelFrame.origin.x = 72
-            detailTextLabelFrame.origin.x = 72
+        if UIView.userInterfaceLayoutDirection(for: self.semanticContentAttribute) == .leftToRight {
+            if icon != nil {
+                textLabelFrame.origin.x = 72
+                detailTextLabelFrame.origin.x = 72
+            } else {
+                textLabelFrame.origin.x = 16
+                detailTextLabelFrame.origin.x = 16
+            }
         } else {
-            textLabelFrame.origin.x = 16
-            detailTextLabelFrame.origin.x = 16
+            if icon != nil {
+                iconView.frame.origin.x = self.contentView.frame.size.width - 16 - iconView.frame.size.width
+                
+                textLabelFrame.origin.x = self.contentView.frame.size.width - textLabelFrame.size.width - 72
+                detailTextLabelFrame.origin.x = self.contentView.frame.size.width - detailTextLabelFrame.size.width - 72
+            } else {
+                textLabelFrame.origin.x = self.contentView.frame.size.width - textLabelFrame.size.width - 16
+                detailTextLabelFrame.origin.x = self.contentView.frame.size.width - detailTextLabelFrame.size.width - 16
+            }
         }
         
         self.textLabel?.frame = textLabelFrame

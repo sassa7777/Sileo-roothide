@@ -49,7 +49,7 @@ class CategoryViewController: SileoTableViewController {
         
         self.headerStackView = headerStackView
         
-        NotificationCenter.default.addObserver([self],
+        NotificationCenter.default.addObserver(weakSelf as Any, //[self] ??? wtf
                                                selector: #selector(CategoryViewController.reloadData),
                                                name: PackageListManager.reloadNotification,
                                                object: nil)
@@ -74,6 +74,7 @@ class CategoryViewController: SileoTableViewController {
     }
     
     @objc func reloadData() {
+        NSLog("SileoLog: CategoryViewController.reloadData \(self)")
         DispatchQueue.global(qos: .userInteractive).async {
             var categories: Set<String> = []
             var categoriesCountCache: [String: Int] = [:]
@@ -81,9 +82,8 @@ class CategoryViewController: SileoTableViewController {
             let installed: [Package]?
             var roothided: [Package] = []
             var archall: [Package] = []
-            if let context = self.repoContext,
-                  let url = context.url {
-                let betterContext = RepoManager.shared.repo(with: url) ?? context
+            if let context = self.repoContext {
+                let betterContext = RepoManager.shared.repo(with: context) ?? context
                 packages =  betterContext.packageArray
                 installed = betterContext.installed
             } else {
@@ -163,9 +163,10 @@ class CategoryViewController: SileoTableViewController {
                     if let headerView = FeaturedBannersView.view(dictionary: depiction, viewController: self, tintColor: nil, isActionable: false) {
                         let newHeight = headerView.depictionHeight(width: self.view.bounds.width)
                         headerView.heightAnchor.constraint(equalToConstant: newHeight).isActive = true
-                        for view in self.headerStackView?.arrangedSubviews ?? [] {
-                            view.removeFromSuperview()
-                        }
+//don't remove authenticationBannerView, and we have removed arrangedSubviews before
+//                        for view in self.headerStackView?.arrangedSubviews ?? [] {
+//                            view.removeFromSuperview()
+//                        }
                         self.headerStackView?.addArrangedSubview(headerView)
                         self.updateHeaderStackView()
                     }

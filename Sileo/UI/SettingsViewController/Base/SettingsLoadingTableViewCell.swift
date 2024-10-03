@@ -9,6 +9,8 @@
 import Foundation
 
 class SettingsLoadingTableViewCell: UITableViewCell {
+    private var loadingView = UIActivityIndicatorView(style: UIActivityIndicatorView.Style.gray)
+    
     required init?(coder: NSCoder) {
         super.init(coder: coder)
     }
@@ -18,12 +20,18 @@ class SettingsLoadingTableViewCell: UITableViewCell {
         
         self.selectionStyle = UITableViewCell.SelectionStyle.none
         self.accessoryType = UITableViewCell.AccessoryType.none
-        let loadingView: UIActivityIndicatorView = UIActivityIndicatorView(style: UIActivityIndicatorView.Style.gray)
         loadingView.translatesAutoresizingMaskIntoConstraints = false
-        loadingView.startAnimating()
         self.addSubview(loadingView)
         
         loadingView.centerXAnchor.constraint(greaterThanOrEqualTo: self.centerXAnchor).isActive = true
         loadingView.centerYAnchor.constraint(greaterThanOrEqualTo: self.centerYAnchor).isActive = true
+    }
+    
+    func startAnimating() {
+        loadingView.startAnimating()
+    }
+
+    func stopAnimating() {
+        loadingView.stopAnimating()
     }
 }

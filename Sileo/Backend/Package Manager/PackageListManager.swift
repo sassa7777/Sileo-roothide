@@ -27,17 +27,25 @@ final class PackageListManager {
     private let initSemphaore = DispatchSemaphore(value: 0)
     public var isLoaded = false
     
+//    public var allPackagesArray: [Package] {
+//        var packages = [Package]()
+//        var installedPackages = installedPackages
+//        for repo in RepoManager.shared.repoList {
+//            let repoPackageArray = repo.packageArray
+//            packages += repo.packageArray
+//            for package in repoPackageArray where installedPackages[package.package] != nil {
+//                installedPackages.removeValue(forKey: package.package)
+//            }
+//        }
+//        return packages + Array(installedPackages.values)
+//    }
+// there is no reason to include installedPackages in allPackagesArray which is used for repo package list
     public var allPackagesArray: [Package] {
         var packages = [Package]()
-        var installedPackages = installedPackages
         for repo in RepoManager.shared.repoList {
-            let repoPackageArray = repo.packageArray
             packages += repo.packageArray
-            for package in repoPackageArray where installedPackages[package.packageID] != nil {
-                installedPackages.removeValue(forKey: package.packageID)
-            }
         }
-        return packages + Array(installedPackages.values)
+        return packages
     }
 
     private let databaseUpdateQueue = DispatchQueue(label: "org.coolstar.SileoStore.database-queue")
@@ -85,12 +93,7 @@ final class PackageListManager {
                 
                 if UserDefaults.standard.bool(forKey: "AutoRefreshSources", fallback: true) {
                     // Start a background repo refresh here instead because it doesn't like it in the Source View Controller
-                    if let tabBarController = UIApplication.shared.windows.first?.rootViewController as? UITabBarController,
-                       let sourcesSVC = tabBarController.viewControllers?[2] as? UISplitViewController,
-                       let sourcesNavNV = sourcesSVC.viewControllers[0] as? SileoNavigationController,
-                       let sourcesVC = sourcesNavNV.viewControllers[0] as? SourcesViewController {
-                        sourcesVC.refreshSources(forceUpdate: false, forceReload: false, isBackground: true, useRefreshControl: false, useErrorScreen: false, completion: nil)
-                    }
+                    NotificationCenter.default.post(name: SourcesViewController.refreshReposNotification, object: nil)
                 }
             }
         }
@@ -118,7 +121,7 @@ final class PackageListManager {
     public func availableUpdates() -> [(Package, Package?)] {
         var updatesAvailable: [(Package, Package?)] = []
         for package in installedPackages.values {
-            guard let latestPackage = self.newestPackage(identifier: package.packageID, repoContext: nil) else {
+            guard let latestPackage = self.newestPackage(identifier: package.package, repoContext: nil) else {
                 continue
             }
             
@@ -153,9 +156,8 @@ final class PackageListManager {
         }
         
         let package = Package(package: packageID, version: packageVersion)
-        package.name = dictionary["name"]
-        if package.name == nil {
-            package.name = package.package
+        if let name = dictionary["name"] {
+            package.name = name
         }
         package.icon = URL(string: dictionary["icon"])
         package.architecture = dictionary["architecture"]
@@ -272,6 +274,8 @@ final class PackageListManager {
             savedCount += packageData.count
             package.rawData = packageData
             
+            package.fromStatusFile = isStatusFile
+            
             if isStatusFile {
                 var wantInfo: pkgwant = .install
                 var eFlag: pkgeflag = .ok
@@ -297,7 +301,7 @@ final class PackageListManager {
                 let packageInstallPath = CommandPath.dpkgDir.appendingPathComponent("info/\(packageID).list")
                 let attr = try? FileManager.default.attributesOfItem(atPath: packageInstallPath.path)
                 package.installDate = attr?[FileAttributeKey.modificationDate] as? Date
-                dict[package.packageID] = package
+                dict[package.package] = package
             } else {
                 if let otherPkg = dict[packageID] {
                     //if DpkgWrapper.isVersion(package.version, greaterThan: otherPkg.version) {
@@ -321,7 +325,7 @@ final class PackageListManager {
     }
 
     public func packageList(identifier: String = "", search: String? = nil, sortPackages sort: Bool = false, repoContext: Repo? = nil, lookupTable: [String: [Package]]? = nil, packagePrepend: [Package]? = nil) -> [Package] {
-        NSLog("SileoLog: packageList=\(identifier),\(search),\(sort),\(repoContext),\(lookupTable?.count),\(packagePrepend) : \(lookupTable)")
+        NSLog("SileoLog: packageList=\(identifier),\(search),\(sort),\(repoContext),\(lookupTable?.count),\(packagePrepend) : \(lookupTable?.map({ ($0,$1.count) }))")
         var packageList = [Package]()
         if identifier == "--installed" {
             packageList = Array(installedPackages.values)
@@ -348,8 +352,9 @@ final class PackageListManager {
                 packageList = repoContext?.packageArray ?? allPackagesArray
             }
         }
+        
         if identifier=="--contextInstalled" {
-            packageList = packageList.filter({ installedPackages.keys.contains($0.packageID) })
+            packageList = packageList.filter({ installedPackages.keys.contains($0.package) })
         } else if identifier=="--contextRootHide" {
             packageList = packageList.filter({ $0.architecture == DpkgWrapper.architecture.primary.rawValue })
         } else if identifier.hasPrefix("category:") {
@@ -366,33 +371,45 @@ final class PackageListManager {
                 return authorName == name
             }
         }
-        if let searchQuery = search,
-           !searchQuery.isEmpty {
+        
+        if let searchQuery = search, !searchQuery.isEmpty {
             let lowercased = searchQuery.lowercased()
             packageList.removeAll { package in
                 // check if the user search term is in the package ID, description or in the author / maintainer name
-                for field in [package.package, package.name, package.author?.name, package.maintainer?.name] {
-                    if field?.localizedStandardContains(lowercased) ?? false { return false }
+//                var fields = [package.package, package.name, package.author?.name, package.maintainer?.name]
+                var fields = [package.package, package.name, package.packageDescription]
+                for field in fields {
+                    if let field = field, field.count>0 {
+                        if field.localizedStandardContains(lowercased) {
+                            return false
+                        }
+                    }
                 }
-                
                 return true
             }
+            
+            if lowercased.lengthOfBytes(using: String.Encoding.utf8) < 2 && packageList.count > 1000 {
+                //skip sort
+                return packageList
+            }
         }
+        
 //        for p in packageList {
 //            NSLog("SileoLog: packageList=\(p.package) \(p.architecture) \(p.version) \(p.sourceRepo) \(p.sourceRepo?.displayName) \(p.sourceFile) author:\(p.author?.string)")
 //        }
         // Remove Any Duplicates
-        var temp = [String: Package]()
-        for package in packageList {
-            if let existing = temp[package.packageID] {
-                if preferredPackage(old:existing, new:package) {
-                    temp[package.packageID] = package
-                }
-            } else {
-                temp[package.packageID] = package
-            }
-        }
-        packageList = Array(temp.values)
+//        var temp = [String: Package]()
+//        for package in packageList {
+//            if let existing = temp[package.package] {
+//                if preferredPackage(old:existing, new:package) {
+//                    temp[package.package] = package
+//                }
+//            } else {
+//                temp[package.package] = package
+//            }
+//        }
+//        packageList = Array(temp.values)
+        
         if sort {
             packageList = sortPackages(packages: packageList, search: search)
         }
@@ -403,60 +420,75 @@ final class PackageListManager {
     }
     
     public func sortPackages(packages: [Package], search: String?) -> [Package] {
+        var starttimes = timespec(tv_sec: 0, tv_nsec: 0)
+        clock_gettime(CLOCK_REALTIME, &starttimes)
+        defer {
+            var endtimes = timespec(tv_sec: 0, tv_nsec: 0)
+            clock_gettime(CLOCK_REALTIME, &endtimes)
+            
+            let startMillis = UInt64(starttimes.tv_sec) * 1000 + UInt64(starttimes.tv_nsec) / 1_000_000
+            let endMillis = UInt64(endtimes.tv_sec) * 1000 + UInt64(endtimes.tv_nsec) / 1_000_000
+            let timesinterval = Double((endMillis - startMillis)) / 1000
+            
+            NSLog("SileoLog: sortPackages(\(packages.count)) cost \(timesinterval) for \(search)")
+//            Thread.callStackSymbols.forEach{NSLog("SileoLog: sortPackages callstack=\($0)")}
+        }
+
         var tmp = packages
-        tmp.sort { obj1, obj2 -> Bool in
-            if let pkg1 = obj1.name?.lowercased() {
-                if let pkg2 = obj2.name?.lowercased() {
-                    if let searchQuery = search?.lowercased(),
-                       !searchQuery.isEmpty {
-                        if pkg1.hasPrefix(searchQuery) && !pkg2.hasPrefix(searchQuery) {
-                            return true
-                        } else if !pkg1.hasPrefix(searchQuery) && pkg2.hasPrefix(searchQuery) {
-                            return false
-                        }
-                        
-                        let diff1 = pkg1.count - searchQuery.count
-                        let diff2 = pkg2.count - searchQuery.count
-                        
-                        if diff1 < diff2 {
-                            return true
-                        } else if diff1 > diff2 {
-                            return false
-                        }
-                        return pkg1.compare(pkg2) != .orderedDescending
-                    } else {
-                        return pkg1.compare(pkg2) != .orderedDescending
-                    }
-                } else {
+        tmp.sort { package1, package2 -> Bool in
+            
+            let check1 = checkRootHide(package1)
+            let check2 = checkRootHide(package2)
+            
+            if check1 && !check2 {
+                return true
+            } else if !check1 && check2 {
+                return false
+            }
+            
+            let name1 = package1.name.lowercased()
+            let name2 = package2.name.lowercased()
+                
+            if let searchQuery = search?.lowercased(), !searchQuery.isEmpty
+            {
+                if name1.hasPrefix(searchQuery) && !name2.hasPrefix(searchQuery) {
                     return true
+                } else if !name1.hasPrefix(searchQuery) && name2.hasPrefix(searchQuery) {
+                    return false
+                }
+                
+                if package1.package == package2.package {
+                    return DpkgWrapper.isVersion(package1.version, greaterThan: package2.version)
+                }
+                
+                let diff1 = name1.count - searchQuery.count
+                let diff2 = name2.count - searchQuery.count
+                
+                if diff1 < diff2 {
+                    return true
+                } else if diff1 > diff2 {
+                    return false
+                }
+                
+            } else {
+
+                if package1.package == package2.package {
+                    return DpkgWrapper.isVersion(package1.version, greaterThan: package2.version)
                 }
             }
-            return false
+            
+            return name1.compare(name2) != .orderedDescending
         }
         return tmp
     }
     
-    public func newestPackage(identifier: String, repoContext: Repo?, packages: [Package]? = nil) -> Package? {
-        if identifier.contains("/") {
-            let url = URL(fileURLWithPath: identifier)
-            guard let rawPackageControl = try? DpkgWrapper.rawFields(packageURL: url) else {
-                return nil
-            }
-            guard let rawPackage = try? ControlFileParser.dictionary(controlFile: rawPackageControl, isReleaseFile: true) else {
-                return nil
-            }
-            guard let package = PackageListManager.package(packageEnum: rawPackage) else {
-                return nil
-            }
-            package.package = identifier
-            package.packageFileURL = url
-            return package
-        } else if let repoContext = repoContext {
+    public func newestPackage(identifier: String, repoContext: Repo?=nil, packages: [Package]? = nil) -> Package? {
+        if let repoContext = repoContext {
             return repoContext.packageDict[identifier.lowercased()]
         } else {
             var newestPackage: Package?
             if var packages = packages {
-                packages = packages.filter { $0.packageID == identifier }
+                packages = packages.filter { $0.package == identifier }
                 for package in packages {
                     if let old = newestPackage {
                         if preferredPackage(old: old, new: package) {
@@ -488,12 +520,17 @@ final class PackageListManager {
     }
     
     public func package(url: URL) -> Package? {
-        let canonicalPath = (try? url.resourceValues(forKeys: [.canonicalPathKey]))?.canonicalPath
-        let filePath = canonicalPath ?? url.path
-        let package = newestPackage(identifier: filePath, repoContext: nil)
-        if let package = package {
-            localPackages[package.packageID] = package
+        guard let rawPackageControl = try? DpkgWrapper.rawFields(packageURL: url) else {
+            return nil
         }
+        guard let rawPackage = try? ControlFileParser.dictionary(controlFile: rawPackageControl, isReleaseFile: true) else {
+            return nil
+        }
+        guard let package = PackageListManager.package(packageEnum: rawPackage) else {
+            return nil
+        }
+        package.local_deb = url.path
+        localPackages[package.package] = package
         return package
     }
     
@@ -502,7 +539,7 @@ final class PackageListManager {
         var rawPackages = [Package]()
         if let packages = (repoContext?.packageArray ?? packages) {
             for identifier in identifiers {
-                rawPackages += packages.filter { $0.packageID == identifier }
+                rawPackages += packages.filter { $0.package == identifier }
                 //why need local packages if we use repo or packages array
 //                if let package = localPackages[identifier] {
 //                    rawPackages.append(package)
@@ -511,20 +548,14 @@ final class PackageListManager {
             
             if sorted {
                 return Array(Set(rawPackages.sorted(by: { pkg1, pkg2 -> Bool in
-                    guard let package1 = pkg1.name else {
-                        return false
-                    }
-                    guard let package2 = pkg2.name else {
-                        return false
-                    }
-                    return package1.compare(package2) != .orderedDescending
+                    return pkg1.name.compare(pkg2.name) != .orderedDescending
                 })))
             } else {
                 return Array(Set(rawPackages))
             }
+        } else {
+            return identifiers.compactMap { newestPackage(identifier: $0, repoContext: nil) }
         }
-        
-        return identifiers.compactMap { newestPackage(identifier: $0, repoContext: nil) }
     }
     
     public func package(identifier: String, version: String, packages: [Package]? = nil) -> Package? {
@@ -534,7 +565,7 @@ final class PackageListManager {
             return version
         }
         if let packages = packages {
-            return packages.first(where: { $0.packageID == identifier && $0.version == version })
+            return packages.first(where: { $0.package == identifier && $0.version == version })
         }
         for repo in RepoManager.shared.repoList {
             if let package = repo.packageDict[identifier],
