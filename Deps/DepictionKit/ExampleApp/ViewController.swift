@@ -83,7 +83,7 @@ extension DepictionViewController: DepictionDelegate {
     }
  
     func handleAction(action: DepictionAction) {
-        NSLog("[DepictionKit] Action = \(action)")
+        NSLog("SileoLog: [DepictionKit] Action = \(action)")
     }
     
     func packageView(for package: DepictionPackage) -> UIView {

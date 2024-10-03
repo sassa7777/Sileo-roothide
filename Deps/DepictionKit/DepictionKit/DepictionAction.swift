@@ -112,7 +112,7 @@ public enum DepictionAction {
             self = .actionError(error: "Action not a URL", action: rawAction)
             return
         }
-        guard let scheme = url.scheme else {
+        guard let scheme = url.scheme?.lowercased() else {
             self = .actionError(error: "URL has no scheme", action: rawAction)
             return
         }

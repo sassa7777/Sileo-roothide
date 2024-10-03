@@ -238,7 +238,7 @@ extension TextView: WKUIDelegate {
                         previewingViewControllerForElement elementInfo: WKPreviewElementInfo,
                         defaultActions previewActions: [WKPreviewActionItem]) -> UIViewController? {
         guard let url = elementInfo.linkURL,
-              let scheme = url.scheme else {
+              let scheme = url.scheme?.lowercased() else {
             return nil
         }
         if scheme == "http" || scheme == "https" {
@@ -261,7 +261,7 @@ extension TextView: WKUIDelegate {
         let url = elementInfo.linkURL
         let configuration = UIContextMenuConfiguration(identifier: nil, previewProvider: {
             if let url = url,
-               url.scheme == "http" || url.scheme == "https" {
+               url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https" {
                 let viewController = self.delegate?.configureSafariViewController(for: url)
                 return viewController
             }

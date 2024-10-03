@@ -357,7 +357,7 @@ extension DepictionContainer: DepictionContainerDelegate {
     }
 
     func configureSafariViewController(for url: URL) -> SFSafariViewController {
-        assert(url.scheme == "http" || url.scheme == "https")
+        assert(url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https")
 
         // Needed because Safari team still haven’t figured out how to not make the bar glitch on
         // scroll when displayed as a modal sheet.
