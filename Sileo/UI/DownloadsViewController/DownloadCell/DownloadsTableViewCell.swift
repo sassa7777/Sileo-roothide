@@ -120,7 +120,7 @@ class DownloadsTableViewCell: BaseSubtitleTableViewCell {
         retryButton.isHidden = true
         let downloadMan = DownloadManager.shared
         guard let package = package,
-              let download = downloadMan.queuedDownloads[package.package.package],
+              let download = downloadMan.vars.queuedDownloads[package.package.package],
               !download.success else { return }
         download.completed = false
         download.task = nil

@@ -20,6 +20,7 @@ class CategoryViewController: SileoTableViewController {
     private var showRootHide = false
     
     private var headerStackView: UIStackView?
+    private var featuredBannersView: DepictionBaseView?
     private var authenticationBannerView: PaymentAuthenticationBannerView?
     
     override func viewDidLoad() {
@@ -120,30 +121,29 @@ class CategoryViewController: SileoTableViewController {
                 self.tableView.reloadData()
             }
         }
-        if let headerStackView = headerStackView {
-            for view in headerStackView.arrangedSubviews {
-                view.removeFromSuperview()
+        
+        DispatchQueue.main.async {
+            self.featuredBannersView = nil
+            self.authenticationBannerView = nil
+            if let headerStackView = self.headerStackView {
+                for view in headerStackView.arrangedSubviews {
+                    view.removeFromSuperview()
+                }
             }
         }
+        
         if let repoContext = repoContext {
             PaymentManager.shared.getPaymentProvider(for: repoContext) { _, provider in
-                self.authenticationBannerView?.removeFromSuperview()
                 guard let provider = provider,
                     !provider.isAuthenticated else {
                     return
                 }
                 provider.fetchInfo(fromCache: true) { _, info in
-                    guard let info = info,
-                    let banner = info["authentication_banner"] as? [String: String] else {
+                    guard let info = info, let banner = info["authentication_banner"] as? [String: String] else {
                         return
                     }
                     DispatchQueue.main.async {
-                        self.authenticationBannerView?.removeFromSuperview()
-                        let authenticationBannerView = PaymentAuthenticationBannerView(provider: provider,
-                                                                                       bannerDictionary: banner,
-                                                                                       viewController: self)
-                        self.headerStackView?.insertArrangedSubview(authenticationBannerView, at: 0)
-                        self.authenticationBannerView = authenticationBannerView
+                        self.authenticationBannerView = PaymentAuthenticationBannerView(provider: provider, bannerDictionary: banner, viewController: self)
                         self.updateHeaderStackView()
                     }
                 }
@@ -160,14 +160,10 @@ class CategoryViewController: SileoTableViewController {
                 guard let banners = depiction["banners"] as? [[String: Any]],
                       !banners.isEmpty else { return }
                 DispatchQueue.main.async {
-                    if let headerView = FeaturedBannersView.view(dictionary: depiction, viewController: self, tintColor: nil, isActionable: false) {
-                        let newHeight = headerView.depictionHeight(width: self.view.bounds.width)
-                        headerView.heightAnchor.constraint(equalToConstant: newHeight).isActive = true
-//don't remove authenticationBannerView, and we have removed arrangedSubviews before
-//                        for view in self.headerStackView?.arrangedSubviews ?? [] {
-//                            view.removeFromSuperview()
-//                        }
-                        self.headerStackView?.addArrangedSubview(headerView)
+                    if let featuredBannersView = FeaturedBannersView.view(dictionary: depiction, viewController: self, tintColor: nil, isActionable: false) {
+                        let newHeight = featuredBannersView.depictionHeight(width: self.view.bounds.width)
+                        featuredBannersView.heightAnchor.constraint(equalToConstant: newHeight).isActive = true
+                        self.featuredBannersView = featuredBannersView
                         self.updateHeaderStackView()
                     }
                 }
@@ -176,6 +172,17 @@ class CategoryViewController: SileoTableViewController {
     }
     
     func updateHeaderStackView() {
+        if let headerStackView = self.headerStackView {
+            for view in headerStackView.arrangedSubviews {
+                view.removeFromSuperview()
+            }
+            if let authenticationBannerView = self.authenticationBannerView {
+                headerStackView.insertArrangedSubview(authenticationBannerView, at: 0)
+            }
+            if let featuredBannersView = self.featuredBannersView {
+                headerStackView.addArrangedSubview(featuredBannersView)
+            }
+        }
         self.updateHeaderStackView(parentSize: self.view.bounds.size)
     }
     

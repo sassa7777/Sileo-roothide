@@ -11,7 +11,6 @@ import Evander
 
 class DependencyResolverAccelerator {
     public static let shared = DependencyResolverAccelerator()
-    private var preflightedRepos = false
     
     struct PreflightedPackage: PackageProtocol {
 
@@ -33,7 +32,7 @@ class DependencyResolverAccelerator {
     
     private var preflightedPackages: [URL: Set<PreflightedPackage>] = [:]
     private var toBePreflighted: [URL: Set<PreflightedPackage>] = [:]
-    
+    private var preflightLock = NSLock()
     public func preflightInstalled() {
         NSLog("SileoLog: DependencyResolverAccelerator.preflightInstalled()")
         if Thread.isMainThread {
@@ -41,7 +40,6 @@ class DependencyResolverAccelerator {
         }
        
         try? getDependencies(packages: Array(PackageListManager.shared.installedPackages.values))
-        preflightedRepos = true
     }
     
     private var depResolverPrefix: URL = {
@@ -79,7 +77,7 @@ class DependencyResolverAccelerator {
         #if targetEnvironment(simulator) || TARGET_SANDBOX
         try? FileManager.default.removeItem(at: newSourcesFile)
         #else
-        spawnAsRoot(args: [CommandPath.rm, "-rf", rootfs(newSourcesFile.aptPath)])
+        spawnAsRoot(args: [CommandPath.rm, "-rf", rootfs(newSourcesFile.path)])
         #endif
     }
     
@@ -90,6 +88,9 @@ class DependencyResolverAccelerator {
         }
         PackageListManager.shared.initWait()
         NSLog("SileoLog: getDependencies2")
+        
+        self.preflightLock.lock()
+        defer { self.preflightLock.unlock() }
 
         for package in packages {
             getDependenciesInternal(package: package)
@@ -116,7 +117,7 @@ class DependencyResolverAccelerator {
                 sourcesData.append(Data(bytes))
             }
             do {
-                try sourcesData.append(to: newSourcesFile.aptUrl)
+                try sourcesData.append(to: newSourcesFile)
             } catch {
                 throw error
             }
@@ -129,7 +130,7 @@ class DependencyResolverAccelerator {
     }
     
     private func getDependenciesInternal(package: Package) {
-        let url = package.sourceFileURL?.aptUrl ?? URL(string: "local://")!
+        let url = package.sourceFileURL ?? URL(string: "local://")!
         if let preflighted = preflightedPackages[url] {
             if preflighted.contains(where: { $0 == package }) {
                 return

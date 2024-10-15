@@ -169,12 +169,12 @@ class DownloadsTableViewController: SileoViewController {
         }
         if !isInstalling {
             let manager = DownloadManager.shared
-            let upgrades = manager.upgrades.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
-            let installations = manager.installations.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
-            let uninstallations = manager.uninstallations.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
-            let installdeps = manager.installdeps.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
-            let uninstalldeps = manager.uninstalldeps.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
-            let errors = manager.errors.raw
+            let upgrades = manager.vars.upgrades.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
+            let installations = manager.vars.installations.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
+            let uninstallations = manager.vars.uninstallations.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
+            let installdeps = manager.vars.installdeps.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
+            let uninstalldeps = manager.vars.uninstalldeps.raw.sorted(by: { $0.package.name.lowercased() < $1.package.name.lowercased() })
+            let errors = manager.vars.errors.raw
             DispatchQueue.main.async { [self] in
                 self.upgrades = upgrades
                 self.installations = installations
@@ -245,7 +245,7 @@ class DownloadsTableViewController: SileoViewController {
             completeLaterButton?.isHidden = true
         }
         let manager = DownloadManager.shared
-        if manager.operationCount() > 0 && !manager.queueStarted && manager.errors.isEmpty {
+        if manager.operationCount() > 0 && !manager.queueStarted && manager.vars.errors.isEmpty {
             FRUIView.animate(withDuration: 0.25) {
                 self.footerViewHeight?.constant = 128
                 self.footerView?.alpha = 1
@@ -266,7 +266,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.footerView?.alpha = 0
             }
         }
-        if manager.operationCount() > 0 && manager.verifyComplete() && manager.queueStarted && manager.errors.isEmpty {
+        if manager.operationCount() > 0 && manager.verifyComplete() && manager.queueStarted && manager.vars.errors.isEmpty {
             manager.lockedForInstallation = true
             isDownloading = false
             cancelDownload?.isHidden = true
@@ -277,7 +277,7 @@ class DownloadsTableViewController: SileoViewController {
             transferToInstall()
             TabBarController.singleton?.presentPopupController()
         }
-        if manager.errors.isEmpty {
+        if manager.vars.errors.isEmpty {
             self.confirmButton?.isEnabled = true
             self.confirmButton?.alpha = 1
         } else {

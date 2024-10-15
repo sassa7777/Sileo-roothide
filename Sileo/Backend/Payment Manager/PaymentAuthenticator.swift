@@ -22,7 +22,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
             if #available(iOS 12, macCatalyst 12, *) {
                 if let error = error {
                     if let error = error as? ASWebAuthenticationSessionError,
-                        error.code == ASWebAuthenticationSessionError.canceledLogin {
+                       error.code == ASWebAuthenticationSessionError.canceledLogin || error.code == ASWebAuthenticationSessionError.presentationContextInvalid {
 //                        completion?(nil, false)
                         return
                     }
@@ -93,7 +93,7 @@ class PaymentAuthenticator: NSObject, ASWebAuthenticationPresentationContextProv
             if #available(iOS 12, macCatalyst 12, *) {
                 if let error = error {
                     if let error = error as? ASWebAuthenticationSessionError,
-                       error.code == ASWebAuthenticationSessionError.canceledLogin {
+                       error.code == ASWebAuthenticationSessionError.canceledLogin || error.code == ASWebAuthenticationSessionError.presentationContextInvalid {
 //                        completion?(nil, false)
                         return
                     }

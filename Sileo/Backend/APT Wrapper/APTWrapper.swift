@@ -488,18 +488,16 @@ class APTWrapper {
             if !difference.isEmpty {
                 outputCallback("Updating Icon Cache\n", debugFD)
                 for appName in difference {
-                    let appPath = URL(fileURLWithPath: "\(CommandPath.prefix)/Applications/").appendingPathComponent(appName)
-                    //never true on rootless?
-                    if appPath.path == Bundle.main.bundlePath {
+                    if appName == Bundle.main.bundleURL.lastPathComponent {
                         refreshSileo = true
                     } else {
-                        spawn(command: "\(CommandPath.prefix)/usr/bin/uicache", args: ["uicache", "-p", rootfs("\(appPath.path)")])
+                        spawn(command: "\(CommandPath.prefix)/usr/bin/uicache", args: ["uicache", "-p", URL(fileURLWithPath: "/Applications/").appendingPathComponent(appName).path])
                     }
                 }
             }
 
             spawnAsRoot(args: [CommandPath.aptget, "clean"])
-            for file in DownloadManager.shared.cachedDownloadFiles.raw {
+            for file in DownloadManager.shared.vars.cachedDownloadFiles.raw {
                 deleteFileAsRoot(file)
             }
             completionCallback(Int(status), finish, refreshSileo)

@@ -70,25 +70,32 @@ final class DownloadManager {
     public var queueStarted = false
     public var totalProgress = CGFloat(0)
     
-    private static let dataQueueContext = 50
-    private static let dataQueueKey = DispatchSpecificKey<Int>()
-    private static let dataQueue: DispatchQueue = {
-        let queue = DispatchQueue(label: "Sileo.dataQueue", qos: .userInitiated)
-        queue.setSpecific(key: dataQueueKey, value: dataQueueContext)
-        return queue
-    }()
+//    private static let dataQueueContext = 50
+//    private static let dataQueueKey = DispatchSpecificKey<Int>()
+//    private static let dataQueue: DispatchQueue = {
+//        let queue = DispatchQueue(label: "Sileo.dataQueue", qos: .userInitiated)
+//        queue.setSpecific(key: dataQueueKey, value: dataQueueContext)
+//        return queue
+//    }()
+        private static let dataQueueContext = aptQueueContext
+        private static let dataQueueKey = aptQueueKey
+        private static let dataQueue = aptQueue
     
-    public var upgrades = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    public var installations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    public var uninstallations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    public var installdeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    public var uninstalldeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    public var errors = SafeSet<APTBrokenPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    
-    public var queuedDownloads = SafeDictionary<String,Download>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
-    public var cachedDownloadFiles = SafeArray<URL>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    struct TSyncVars {
+        public var upgrades = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var installations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var uninstallations = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var installdeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var uninstalldeps = SafeSet<DownloadPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var errors = SafeSet<APTBrokenPackage>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
         
-    public var repoDownloadOverrideProviders = SafeDictionary<String, Set<AnyHashable>>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var queuedDownloads = SafeDictionary<String,Download>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        public var cachedDownloadFiles = SafeArray<URL>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+        
+        public var repoDownloadOverrideProviders = SafeDictionary<String, Set<AnyHashable>>(queue: dataQueue, key: dataQueueKey, context: dataQueueContext)
+    }
+    
+    public var vars = TSyncVars()
     
     public var viewController: DownloadsTableViewController
     
@@ -101,20 +108,20 @@ final class DownloadManager {
     }
     
     public func installingPackages() -> Int {
-        upgrades.count + installations.count + installdeps.count
+        self.vars.upgrades.count + self.vars.installations.count + self.vars.installdeps.count
     }
     
     public func uninstallingPackages() -> Int {
-        uninstallations.count + uninstalldeps.count
+        self.vars.uninstallations.count + self.vars.uninstalldeps.count
     }
     
     public func operationCount() -> Int {
-        upgrades.count + installations.count + uninstallations.count + installdeps.count + uninstalldeps.count
+        self.vars.upgrades.count + self.vars.installations.count + self.vars.uninstallations.count + self.vars.installdeps.count + self.vars.uninstalldeps.count
     }
         
     public func downloadingPackages() -> Int {
         var downloadsCount = 0
-        for keyValue in queuedDownloads.raw where keyValue.value.progress < 1 {
+        for keyValue in self.vars.queuedDownloads.raw where keyValue.value.progress < 1 {
             downloadsCount += 1
         }
         return downloadsCount
@@ -122,7 +129,7 @@ final class DownloadManager {
     
     public func readyPackages() -> Int {
         var readyCount = 0
-        for keyValue in queuedDownloads.raw {
+        for keyValue in self.vars.queuedDownloads.raw {
             let download = keyValue.value
             if download.progress == 1 && download.success == true {
                 readyCount += 1
@@ -132,9 +139,9 @@ final class DownloadManager {
     }
     
     public func verifyComplete() -> Bool {
-        let allRawDownloads = upgrades.raw.union(installations.raw).union(installdeps.raw)
+        let allRawDownloads = self.vars.upgrades.raw.union(self.vars.installations.raw).union(self.vars.installdeps.raw)
         for dlPackage in allRawDownloads {
-            guard let download = queuedDownloads[dlPackage.package.package],
+            guard let download = self.vars.queuedDownloads[dlPackage.package.package],
                   download.success else { return false }
         }
         return true
@@ -344,16 +351,16 @@ final class DownloadManager {
             // We don't want more than one download at a time
             guard currentDownloads <= maxParallelDownloads else { return }
             // Get a list of downloads that need to take place
-            let allRawDownloads = upgrades.raw.union(installations.raw).union(installdeps.raw)
+            let allRawDownloads = self.vars.upgrades.raw.union(self.vars.installations.raw).union(self.vars.installdeps.raw)
             for dlPackage in allRawDownloads {
                 // Get the download object, we don't want to create multiple
                 let download: Download
                 let package = dlPackage.package
-                if let tmp = queuedDownloads[package.package] {
+                if let tmp = self.vars.queuedDownloads[package.package] {
                     download = tmp
                 } else {
                     download = Download(package: package, session: self.currentDownloadSession)
-                    queuedDownloads[package.package] = download
+                    self.vars.queuedDownloads[package.package] = download
                 }
                 
                 // Means download has already started / completed
@@ -367,7 +374,7 @@ final class DownloadManager {
     }
  
     public func queuedDownload(package: String) -> Download? {
-        queuedDownloads[package]
+        self.vars.queuedDownloads[package]
     }
     
     private func aptEncoded(string: String, isArch: Bool) -> String {
@@ -389,33 +396,27 @@ final class DownloadManager {
         let destFileName = "\(CommandPath.prefix)/var/cache/apt/archives/\(packageID)_\(version)_\(architecture).deb"
         let destURL = URL(fileURLWithPath: destFileName)
         
-        if !FileManager.default.fileExists(atPath: destFileName) {
-            if let local_deb = package.local_deb {
-                moveFileAsRoot(from: URL(fileURLWithPath: local_deb), to: URL(fileURLWithPath: destFileName))
-                DownloadManager.shared.cachedDownloadFiles.append(URL(fileURLWithPath: local_deb))
-                package.local_deb = destFileName
-                return FileManager.default.fileExists(atPath: destFileName)
-            }
-            return false
+        if let local_deb = package.local_deb {
+            moveFileAsRoot(from: URL(fileURLWithPath: local_deb), to: URL(fileURLWithPath: destFileName))
+            self.vars.cachedDownloadFiles.append(URL(fileURLWithPath: local_deb))
+            package.local_deb = destFileName
+            return FileManager.default.fileExists(atPath: destFileName)
         }
         
         let packageControl = package.rawControl
+        let supportedHashTypes = PackageHashType.allCases.compactMap { type in packageControl[type.rawValue].map { (type, $0) } }
+        let packageContainsHashes = !supportedHashTypes.isEmpty
         
-        if package.local_deb==nil {
-            let supportedHashTypes = PackageHashType.allCases.compactMap { type in packageControl[type.rawValue].map { (type, $0) } }
-            let packageContainsHashes = !supportedHashTypes.isEmpty
-            
-            guard packageContainsHashes else { return false }
-            
-            let packageIsValid = supportedHashTypes.allSatisfy {
-                let hash = packageControl[$1]
-                guard let refHash = destURL.hash(ofType: $0.hashType),
-                      refHash == hash else { return false }
-                return true
-            }
-            guard packageIsValid else {
-                return false
-            }
+        guard packageContainsHashes else { return false }
+        
+        let packageIsValid = supportedHashTypes.allSatisfy {
+            let hash = packageControl[$1]
+            guard let refHash = destURL.hash(ofType: $0.hashType),
+                  refHash == hash else { return false }
+            return true
+        }
+        guard packageIsValid else {
+            return false
         }
         
         return true
@@ -463,7 +464,7 @@ final class DownloadManager {
 
         moveFileAsRoot(from: fileURL, to: destURL)
         #endif
-        DownloadManager.shared.cachedDownloadFiles.append(fileURL)
+        self.vars.cachedDownloadFiles.append(fileURL)
         return true
     }
     
@@ -475,16 +476,16 @@ final class DownloadManager {
         }
         
         // Clear any current depends
-        installdeps.removeAll()
-        uninstalldeps.removeAll()
-        errors.removeAll()
+        self.vars.installdeps.removeAll()
+        self.vars.uninstalldeps.removeAll()
+        self.vars.errors.removeAll()
         
         // Get a total of depends to be installed and break if empty
-        let installationsAndUpgrades = self.installations.raw.union(self.upgrades.raw)
-        guard !(installationsAndUpgrades.isEmpty && uninstallations.isEmpty) else {
+        let installationsAndUpgrades = self.vars.installations.raw.union(self.vars.upgrades.raw)
+        guard !(installationsAndUpgrades.isEmpty && self.vars.uninstallations.isEmpty) else {
             return
         }
-        let all = (installationsAndUpgrades.union(uninstallations.raw)).map { $0.package }
+        let all = (installationsAndUpgrades.union(self.vars.uninstallations.raw)).map { $0.package }
         do {
             // Run the dep accelerator for any packages that have not already been cared about
             try DependencyResolverAccelerator.shared.getDependencies(packages: all)
@@ -497,7 +498,7 @@ final class DownloadManager {
         var aptOutput: APTOutput
         do {
             // Get the full list of packages to be installed and removed from apt
-            aptOutput = try APTWrapper.operationList(installList: installationsAndUpgrades, removeList: uninstallations.raw)
+            aptOutput = try APTWrapper.operationList(installList: installationsAndUpgrades, removeList: self.vars.uninstallations.raw)
             NSLog("SileoLog: aptOutput=\(aptOutput.operations), \(aptOutput.conflicts)")
         } catch {
             throw error
@@ -509,7 +510,7 @@ final class DownloadManager {
             uninstallIdentifiers.append(operation.packageID)
         }
         
-        var uninstallations = uninstallations.raw
+        var uninstallations = self.vars.uninstallations.raw
         let rawUninstalls = PackageListManager.shared.packages(identifiers: uninstallIdentifiers, sorted: false, packages: Array(PackageListManager.shared.installedPackages.values))
         guard rawUninstalls.count == uninstallIdentifiers.count else {
             rawUninstalls.map({NSLog("SileoLog: rawUninstalls=\($0.package) \($0.package)")})
@@ -519,86 +520,63 @@ final class DownloadManager {
         var uninstallDeps = Set<DownloadPackage>(rawUninstalls.compactMap { DownloadPackage(package: $0) })
         
         // Get the list of packages to be installed, including depends
-        var installIdentifiers = [String]()
-        var installDepOperation = [String: [(String, String)]]()
+        var installDepOperation = [String: (String, [String])]()
         for operation in aptOutput.operations where operation.type == .install {
-            installIdentifiers.append(operation.packageID)
-            //there may be multiple repos in the release: {"Version":"2021.07.18","Package":"chariz-keyring","Release":"192.168.2.171, local-deb [all]","Type":"Inst"}
-            guard let releases = operation.release?.split(separator: ",") else { continue }
-            for release in releases {
-                guard let host = release.trimmingCharacters(in: .whitespaces).split(separator: " ").first else { continue }
-                
-                if var hostArray = installDepOperation[String(host)] {
-                    hostArray.append((operation.packageID, operation.version))
-                    installDepOperation[String(host)] = hostArray
-                } else {
-                    installDepOperation[String(host)] = [(operation.packageID, operation.version)]
-                }
-            }
-        }
-        NSLog("SileoLog: installIdentifiers=\(installIdentifiers), installDepOperation=\(installDepOperation)")
-        var installIndentifiersReference = installIdentifiers
-        var rawInstalls = ContiguousArray<Package>()
-        for (host, packages) in installDepOperation {
-            for aptPackage in packages {
-                
-                guard installIdentifiers.contains(aptPackage.0) else { continue } //already found one
-                
-                if host == "local-deb" { //preferred local package
-                    if let localPackage = PackageListManager.shared.localPackages[aptPackage.0] {
-                        if checkRootHide(localPackage) {
-                            if localPackage.version == aptPackage.1 {
-                                rawInstalls.append(localPackage)
-                                installIdentifiers.removeAll { $0 == aptPackage.0 }
-                                NSLog("SileoLog: local package=\(localPackage.package),\(localPackage.version),\(localPackage.local_deb)")
-                            }
-                        }
-                    }
-                } else {
-                    //if let repo = RepoManager.shared.repoList.first(where: {return $0.url?.host == host }) {
-                    // a host may have multiple repos
-                    for repo in RepoManager.shared.repoList where repo.url?.host == host {
-                        NSLog("SileoLog: aptPackage=\(aptPackage.0),\(aptPackage.1)")
-                        if let repoPackage = repo.packageDict[aptPackage.0] {
-                            NSLog("SileoLog: repoPackage=\(repoPackage.package),\(repoPackage.version),\(repoPackage.sourceRepo?.url)")
-                            if checkRootHide(repoPackage) {
-                                if repoPackage.version == aptPackage.1 {
-                                    rawInstalls.append(repoPackage)
-                                    installIdentifiers.removeAll { $0 == aptPackage.0 }
-                                } else if let versionPackage = repoPackage.getVersion(aptPackage.1) {
-                                    rawInstalls.append(versionPackage)
-                                    installIdentifiers.removeAll { $0 == aptPackage.0 }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-            
-        rawInstalls.map({NSLog("SileoLog: rawInstalls1: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
-        rawInstalls += PackageListManager.shared.packages(identifiers: installIdentifiers, sorted: false)
-        rawInstalls.map({NSLog("SileoLog: rawInstalls2: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
 
-        for package in rawInstalls {
-            if !checkRootHide(package) {
-                let compat = APTBrokenPackage.ConflictingPackage(package:"roothide", conflict:.conflicts)
-                let brokenPackage = APTBrokenPackage(packageID: package.package, conflictingPackages: [compat])
-                aptOutput.conflicts.append(brokenPackage)
-//                rawInstalls.removeAll { $0 == package}
-//                installIdentifiers.removeAll { $0 == package.package}
-//                installIndentifiersReference.removeAll { $0 == package.package}
+            //there may be multiple repos in the release: \
+            //{"Version":"2021.07.18","Package":"chariz-keyring","Release":"192.168.2.171, local-deb [all]","Type":"Inst"}
+            //{"Version":"62","Package":"lsof","Release":"roothide.github.io, iosjb.top [iphoneos-arm64e]","Type":"Inst"}
+            //{"Version":"0.3.8","Package":"com.nan.dpkg-fill","Release":"invalidunit.github.io [iphoneos-arm64e]","Type":"Inst"}
+            
+            var hosts = [String]()
+            if let releases = operation.release?.split(separator: ",") {
+                for release in releases {
+                    guard let host = release.trimmingCharacters(in: .whitespaces).split(separator: " ").first else { continue }
+                    hosts.append(String(host))
+                }
+            }
+
+            installDepOperation[operation.packageID] = (operation.version, hosts)
+        }
+        NSLog("SileoLog: installDepOperation=\(installDepOperation)")
+        var rawInstalls = ContiguousArray<Package>()
+        for (packageID, (packageVersion,hosts)) in installDepOperation {
+                
+            if hosts.contains("local-deb") { //preferred local package
+                if let localPackage = PackageListManager.shared.localPackages[packageID] {
+                    if checkRootHide(localPackage) {
+                        if localPackage.version == packageVersion {
+                            NSLog("SileoLog: using local package=\(localPackage.package),\(localPackage.version),\(localPackage.local_deb)")
+                            rawInstalls.append(localPackage)
+                        }
+                    }
+                }
+            } else {
+                //hosts may be empty?
+                hostLoop: for host in hosts {
+                    // there may be multiple repos with the same host
+                    for repo in RepoManager.shared.repoList where repo.url?.host == host {
+                        if let repoPackage = PackageListManager.shared.package(identifier: packageID, version: packageVersion, packages: repo.packageArray)
+                        {
+                            NSLog("SileoLog: using repoPackage=\(repoPackage.package),\(repoPackage.version),\(repoPackage.sourceRepo?.url)")
+                            if checkRootHide(repoPackage) {
+                                rawInstalls.append(repoPackage)
+                                break hostLoop
+                            }
+                        }
+                    }
+                }
             }
         }
         
-        guard rawInstalls.count == installIndentifiersReference.count else {
-            rawInstalls.map({NSLog("SileoLog: rawInstalls: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
-            installIndentifiersReference.map({NSLog("SileoLog: installIndentifiersReference=\($0)")})
+        rawInstalls.map({NSLog("SileoLog: rawInstalls: \($0.package)=\($0.version) \($0.local_deb ?? $0.sourceRepo?.url)")})
+
+        guard rawInstalls.count == installDepOperation.count else {
             throw APTParserErrors.blankJsonOutput(error: "Install Identifier Mismatch for Identifiers")
         }
         var installDeps = Set<DownloadPackage>(rawInstalls.compactMap { DownloadPackage(package: $0) })
-        var installations = installations.raw
-        var upgrades = upgrades.raw
+        var installations = self.vars.installations.raw
+        var upgrades = self.vars.upgrades.raw
 
         //Remove the package resolved by apt from the user-specified installation packages
         if aptOutput.conflicts.isEmpty {
@@ -613,19 +591,19 @@ final class DownloadManager {
             installDeps.removeAll { upgrades.contains($0) }
         }
   
-        self.upgrades.setTo(upgrades)
-        self.installations.setTo(installations)
-        self.installdeps.setTo(installDeps)
-        self.uninstallations.setTo(uninstallations)
-        self.uninstalldeps.setTo(uninstallDeps)
-        self.errors.setTo(Set<APTBrokenPackage>(aptOutput.conflicts))
+        self.vars.upgrades.setTo(upgrades)
+        self.vars.installations.setTo(installations)
+        self.vars.installdeps.setTo(installDeps)
+        self.vars.uninstallations.setTo(uninstallations)
+        self.vars.uninstalldeps.setTo(uninstallDeps)
+        self.vars.errors.setTo(Set<APTBrokenPackage>(aptOutput.conflicts))
         
-        NSLog("SileoLog: upgrades=\(upgrades.count), installations=\(installations.count), installdeps=\(installdeps.count) uninstallations=\(uninstallations.count) uninstalldeps=\(uninstalldeps.count) errors=\(errors.count)")
-        for p in self.upgrades.raw { NSLog("SileoLog: self.upgrades: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
-        for p in self.installations.raw { NSLog("SileoLog: self.installations: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
-        for p in self.installdeps.raw { NSLog("SileoLog: self.installdeps: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
-        for p in self.uninstallations.raw { NSLog("SileoLog: self.uninstallations: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
-        for p in self.uninstalldeps.raw { NSLog("SileoLog: self.uninstalldeps: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        NSLog("SileoLog: upgrades=\(self.vars.upgrades.count), installations=\(self.vars.installations.count), installdeps=\(self.vars.installdeps.count) uninstallations=\(self.vars.uninstallations.count) uninstalldeps=\(self.vars.uninstalldeps.count) errors=\(self.vars.errors.count)")
+        for p in self.vars.upgrades.raw { NSLog("SileoLog: self.upgrades: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.vars.installations.raw { NSLog("SileoLog: self.installations: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.vars.installdeps.raw { NSLog("SileoLog: self.installdeps: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.vars.uninstallations.raw { NSLog("SileoLog: self.uninstallations: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
+        for p in self.vars.uninstalldeps.raw { NSLog("SileoLog: self.uninstalldeps: \(p.package.package)=\(p.package.version), \(p.package.local_deb ?? p.package.sourceRepo?.url)") }
     }
     
     private func checkInstalled() {
@@ -642,9 +620,9 @@ final class DownloadManager {
 
                 let downloadPackage = DownloadPackage(package: newestPackage)
                 
-                if !installations.contains(downloadPackage) && !uninstallations.contains(downloadPackage) {
+                if !self.vars.installations.contains(downloadPackage) && !self.vars.uninstallations.contains(downloadPackage) {
                     NSLog("SileoLog: reinstreq \(downloadPackage.package)")
-                    installations.insert(downloadPackage)
+                    self.vars.installations.insert(downloadPackage)
                     //manually resolve package here so that apt can be able to reinstall it
                     DownloadManager.aptQueue.async {
                         try? DependencyResolverAccelerator.shared.getDependencies(packages: [downloadPackage.package])
@@ -653,9 +631,9 @@ final class DownloadManager {
             } else if package.eFlag == .ok {
                 let downloadPackage = DownloadPackage(package: package)
                 if package.wantInfo == .deinstall || package.wantInfo == .purge || package.status == .halfconfigured {
-                    if !installations.contains(downloadPackage) && !uninstallations.contains(downloadPackage) {
+                    if !self.vars.installations.contains(downloadPackage) && !self.vars.uninstallations.contains(downloadPackage) {
                         NSLog("SileoLog: wantInfo \(downloadPackage.package.package) = \(downloadPackage.package.wantInfo.rawValue)")
-                        uninstallations.insert(downloadPackage)
+                        self.vars.uninstallations.insert(downloadPackage)
                     }
                 }
             }
@@ -663,31 +641,31 @@ final class DownloadManager {
     }
     
     public func cancelDownloads() {
-        for download in queuedDownloads.raw.values {
+        for download in self.vars.queuedDownloads.raw.values {
             download.task?.cancel()
             if let backgroundTaskIdentifier = download.backgroundTask {
                 UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
             }
         }
         //how about cachedDownloadFiles?
-        queuedDownloads.removeAll()
+        self.vars.queuedDownloads.removeAll()
         currentDownloads = 0
     }
     
     public func removeAllItems() {
-        upgrades.removeAll()
-        installdeps.removeAll()
-        installations.removeAll()
-        uninstalldeps.removeAll()
-        uninstallations.removeAll()
-        errors.removeAll()
-        for download in queuedDownloads.raw.values {
+        self.vars.upgrades.removeAll()
+        self.vars.installdeps.removeAll()
+        self.vars.installations.removeAll()
+        self.vars.uninstalldeps.removeAll()
+        self.vars.uninstallations.removeAll()
+        self.vars.errors.removeAll()
+        for download in self.vars.queuedDownloads.raw.values {
             download.task?.cancel()
             if let backgroundTaskIdentifier = download.backgroundTask {
                 UIApplication.shared.endBackgroundTask(backgroundTaskIdentifier)
             }
         }
-        queuedDownloads.removeAll()
+        self.vars.queuedDownloads.removeAll()
         currentDownloads = 0
         self.checkInstalled()
     }
@@ -718,41 +696,41 @@ final class DownloadManager {
     
     public func find(package: Package) -> DownloadManagerQueue {
         let downloadPackage = DownloadPackage(package: package)
-        if installations.contains(downloadPackage) {
+        if self.vars.installations.contains(downloadPackage) {
             return .installations
-        } else if uninstallations.contains(downloadPackage) {
+        } else if self.vars.uninstallations.contains(downloadPackage) {
             return .uninstallations
-        } else if upgrades.contains(downloadPackage) {
+        } else if self.vars.upgrades.contains(downloadPackage) {
             return .upgrades
-        } else if installdeps.contains(downloadPackage) {
+        } else if self.vars.installdeps.contains(downloadPackage) {
             return .installdeps
-        } else if uninstalldeps.contains(downloadPackage) {
+        } else if self.vars.uninstalldeps.contains(downloadPackage) {
             return .uninstalldeps
         }
         return .none
     }
     
     public func find(package: String) -> DownloadManagerQueue {
-        if installations.contains(where: { $0.package.package == package }) {
+        if self.vars.installations.contains(where: { $0.package.package == package }) {
             return .installations
-        } else if uninstallations.contains(where: { $0.package.package == package }) {
+        } else if self.vars.uninstallations.contains(where: { $0.package.package == package }) {
             return .uninstallations
-        } else if upgrades.contains(where: { $0.package.package == package }) {
+        } else if self.vars.upgrades.contains(where: { $0.package.package == package }) {
             return .upgrades
-        } else if installdeps.contains(where: { $0.package.package == package }) {
+        } else if self.vars.installdeps.contains(where: { $0.package.package == package }) {
             return .installdeps
-        } else if uninstalldeps.contains(where: { $0.package.package == package }) {
+        } else if self.vars.uninstalldeps.contains(where: { $0.package.package == package }) {
             return .uninstalldeps
         }
         return .none
     }
     
     public func remove(package: String) {
-        installations.remove { $0.package.package == package }
-        upgrades.remove { $0.package.package == package }
-        installdeps.remove { $0.package.package == package }
-        uninstallations.remove { $0.package.package == package }
-        uninstalldeps.remove { $0.package.package == package }
+        self.vars.installations.remove { $0.package.package == package }
+        self.vars.upgrades.remove { $0.package.package == package }
+        self.vars.installdeps.remove { $0.package.package == package }
+        self.vars.uninstallations.remove { $0.package.package == package }
+        self.vars.uninstalldeps.remove { $0.package.package == package }
     }
     
     
@@ -1033,7 +1011,7 @@ final class DownloadManager {
         case .none:
             return
         case .installations:
-            installations.insert(downloadPackage)
+            self.vars.installations.insert(downloadPackage)
         case .uninstallations:
             if approved == false && isEssential(downloadPackage.package) {
                 let message = String(format: String(localizationKey: "Essential_Warning"),
@@ -1051,27 +1029,27 @@ final class DownloadManager {
                 TabBarController.singleton?.present(alert, animated: true)
                 return
             }
-            uninstallations.insert(downloadPackage)
+            self.vars.uninstallations.insert(downloadPackage)
         case .upgrades:
-            upgrades.insert(downloadPackage)
+            self.vars.upgrades.insert(downloadPackage)
         case .installdeps:
-            installdeps.insert(downloadPackage)
+            self.vars.installdeps.insert(downloadPackage)
         case .uninstalldeps:
-            uninstalldeps.insert(downloadPackage)
+            self.vars.uninstalldeps.insert(downloadPackage)
         }
     }
     
     public func upgradeAll(packages: Set<Package>, _ completion: @escaping () -> ()) {
         Self.aptQueue.async { [self] in
             var packages = packages
-            let mapped = upgrades.map { $0.package.package }
+            let mapped = self.vars.upgrades.map { $0.package.package }
             packages.removeAll { mapped.contains($0.package) }
             for package in packages {
                 let downloadPackage = DownloadPackage(package: package)
                 let found = find(package: package.package)
                 if found == .upgrades { continue }
                 remove(downloadPackage: downloadPackage, queue: found)
-                upgrades.insert(downloadPackage)
+                self.vars.upgrades.insert(downloadPackage)
             }
             completion()
         }
@@ -1087,38 +1065,38 @@ final class DownloadManager {
         case .none:
             return
         case .installations:
-            installations.remove(downloadPackage)
+            self.vars.installations.remove(downloadPackage)
         case .uninstallations:
-            uninstallations.remove(downloadPackage)
+            self.vars.uninstallations.remove(downloadPackage)
         case .upgrades:
-            upgrades.remove(downloadPackage)
+            self.vars.upgrades.remove(downloadPackage)
         case .installdeps:
-            installdeps.remove(downloadPackage)
+            self.vars.installdeps.remove(downloadPackage)
         case .uninstalldeps:
-            uninstalldeps.remove(downloadPackage)
+            self.vars.uninstalldeps.remove(downloadPackage)
         }
     }
 
     public func register(downloadOverrideProvider: DownloadOverrideProviding, repo: Repo) {
-        if repoDownloadOverrideProviders[repo.repoURL] == nil {
-            repoDownloadOverrideProviders[repo.repoURL] = Set()
+        if self.vars.repoDownloadOverrideProviders[repo.repoURL] == nil {
+            self.vars.repoDownloadOverrideProviders[repo.repoURL] = Set()
         }
-        repoDownloadOverrideProviders[repo.repoURL]?.insert(downloadOverrideProvider.hashableObject)
+        self.vars.repoDownloadOverrideProviders[repo.repoURL]?.insert(downloadOverrideProvider.hashableObject)
     }
     
     public func deregister(downloadOverrideProvider: DownloadOverrideProviding, repo: Repo) {
-        repoDownloadOverrideProviders[repo.repoURL]?.remove(downloadOverrideProvider.hashableObject)
+        self.vars.repoDownloadOverrideProviders[repo.repoURL]?.remove(downloadOverrideProvider.hashableObject)
     }
     
     public func deregister(downloadOverrideProvider: DownloadOverrideProviding) {
-        for keyVal in repoDownloadOverrideProviders.raw {
-            repoDownloadOverrideProviders[keyVal.key]?.remove(downloadOverrideProvider.hashableObject)
+        for keyVal in self.vars.repoDownloadOverrideProviders.raw {
+            self.vars.repoDownloadOverrideProviders[keyVal.key]?.remove(downloadOverrideProvider.hashableObject)
         }
     }
     
     private func overrideDownloadURL(package: Package, repo: Repo?, completionHandler: @escaping (String?, URL?) -> Void) {
         guard let repo = repo,
-              let providers = repoDownloadOverrideProviders[repo.repoURL],
+              let providers = self.vars.repoDownloadOverrideProviders[repo.repoURL],
               !providers.isEmpty else {
             return completionHandler(nil, nil)
         }
@@ -1249,10 +1227,10 @@ final class DownloadManager {
     private func performOperations(progressCallback: @escaping (Double, Bool, String, String) -> Void,
                                   outputCallback: @escaping (String, Int) -> Void,
                                   completionCallback: @escaping (Int, APTWrapper.FINISH, Bool) -> Void) {
-        var installs = Array(installations.raw)
-        installs += upgrades.raw
-        let removals = Array(uninstallations.raw) + Array(uninstalldeps.raw)
-        let installdeps = Array(installdeps.raw)
+        var installs = Array(self.vars.installations.raw)
+        installs += self.vars.upgrades.raw
+        let removals = Array(self.vars.uninstallations.raw) + Array(self.vars.uninstalldeps.raw)
+        let installdeps = Array(self.vars.installdeps.raw)
         APTWrapper.performOperations(installs: installs,
                                      removals: removals,
                                      installDeps: installdeps,

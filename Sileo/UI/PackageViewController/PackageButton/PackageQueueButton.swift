@@ -182,7 +182,8 @@ class PackageQueueButton: PackageButton {
         let downloadManager = DownloadManager.shared
 
         let queueFound = downloadManager.find(package: package)
-        if let installedPackage = installedPackage {
+        //self.installedPackage may not be ready yet
+        if let installedPackage = PackageListManager.shared.installedPackage(identifier: package.package) {
             if !package.commercial || (paymentInfo?.available ?? false) {
                 var repo: Repo?
                 for repoEntry in RepoManager.shared.repoList where
@@ -222,7 +223,7 @@ class PackageQueueButton: PackageButton {
                 self.requestQueuePackage(package: package, queue: .uninstallations)
             }
             actionItems.append(action)
-        } else {
+        } else if !package.fromStatusFile {
             let action = CSActionItem(title: String(localizationKey: "Package_Get_Action"),
                                       image: UIImage(systemNameOrNil: "square.and.arrow.down"),
                                       style: .default) {

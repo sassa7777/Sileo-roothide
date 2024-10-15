@@ -17,7 +17,7 @@ final class SourcesViewController: SileoViewController {
     var defaultPagePresent = false
     var detailedPageUserPresent = false
     
-    private var tableView: SileoTableView?
+    private var tableView = SileoTableView(frame: .zero, style: .plain)
     public var refreshControl = UIRefreshControl()
     private var inRefreshing = false
     
@@ -78,23 +78,20 @@ final class SourcesViewController: SileoViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        tableView = SileoTableView(frame: .zero, style: .plain)
-//        tableView?.semanticContentAttribute = .forceLeftToRight //will only work for cells
 
-        view.addSubview(tableView!)
-        tableView?.translatesAutoresizingMaskIntoConstraints = false
-        tableView?.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
-        tableView?.bottomAnchor.constraint(equalTo: view.bottomAnchor).isActive = true
-        tableView?.trailingAnchor.constraint(equalTo: view.trailingAnchor).isActive = true
-        tableView?.leadingAnchor.constraint(equalTo: view.leadingAnchor).isActive = true
+        view.addSubview(tableView)
+        tableView.translatesAutoresizingMaskIntoConstraints = false
+        tableView.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
+        tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor).isActive = true
+        tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor).isActive = true
+        tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor).isActive = true
         #if !targetEnvironment(macCatalyst)
-        tableView?.refreshControl = refreshControl
+        tableView.refreshControl = refreshControl
         #endif
         refreshControl.addTarget(self, action: #selector(refreshSources(_:)), for: .valueChanged)
         
         self.title = String(localizationKey: "Sources_Page")
-        tableView?.register(SourcesTableViewFooter.self, forHeaderFooterViewReuseIdentifier: "Sileo.SourcesTableViewFooter")
+        tableView.register(SourcesTableViewFooter.self, forHeaderFooterViewReuseIdentifier: "Sileo.SourcesTableViewFooter")
         
         updateSileoColors()
         weak var weakSelf = self
@@ -103,13 +100,12 @@ final class SourcesViewController: SileoViewController {
                                                name: SileoThemeManager.sileoChangedThemeNotification,
                                                object: nil)
         
-        tableView?.delegate = self
-        tableView?.dataSource = self
-        self.tableView?.separatorInset = UIEdgeInsets(top: 72, left: 0, bottom: 0, right: 0)
-        self.tableView?.separatorColor = UIColor(white: 0, alpha: 0.2)
+        tableView.delegate = self
+        tableView.dataSource = self
+        self.tableView.separatorInset = UIEdgeInsets(top: 72, left: 0, bottom: 0, right: 0)
+        self.tableView.separatorColor = UIColor(white: 0, alpha: 0.2)
         self.setEditing(false, animated: false)
         
-        self.registerForPreviewing(with: self, sourceView: self.tableView!)
         self.navigationController?.navigationBar.superview?.tag = WHITE_BLUR_TAG
         #if targetEnvironment(macCatalyst)
         let nav = self.navigationItem
@@ -127,7 +123,7 @@ final class SourcesViewController: SileoViewController {
 
     private func presentDefaultPage() {
         NSLog("SileoLog: presentDefaultPage \(self.splitViewController) \(self.splitViewController?.isCollapsed)")
-        if let tableView = self.tableView, self.splitViewController?.isCollapsed == false {
+        if self.splitViewController?.isCollapsed == false {
             let indexPath = IndexPath(row: 0, section: 0)
             tableView.selectRow(at: indexPath, animated: true, scrollPosition: .none)
             if !defaultPagePresent || presentRepoUrl != nil {
@@ -140,7 +136,7 @@ final class SourcesViewController: SileoViewController {
     }
     
     private func deselectRepos() {
-        if let tableView = self.tableView, self.splitViewController?.isCollapsed ?? false {
+        if self.splitViewController?.isCollapsed ?? false {
             self.detailedPageUserPresent = false
             if let selectedRows = tableView.indexPathsForSelectedRows {
                  for indexPath in selectedRows {
@@ -160,7 +156,7 @@ final class SourcesViewController: SileoViewController {
         NSLog("SileoLog: SourcesViewController.viewDidLayoutSubviews \(self.splitViewController?.isCollapsed) \(self.presentRepoUrl)")
         super.viewDidLayoutSubviews()
 
-        if let tableView = self.tableView, self.splitViewController?.isCollapsed == false
+        if self.splitViewController?.isCollapsed == false
         {
             if self.presentRepoUrl == nil
             {
@@ -201,8 +197,8 @@ final class SourcesViewController: SileoViewController {
     }
     
     @objc func updateSileoColors() {
-        self.tableView?.backgroundColor = .sileoBackgroundColor
-        self.tableView?.separatorColor = .sileoSeparatorColor
+        self.tableView.backgroundColor = .sileoBackgroundColor
+        self.tableView.separatorColor = .sileoSeparatorColor
         self.statusBarStyle = .default
         view.backgroundColor = .sileoBackgroundColor
     }
@@ -213,7 +209,7 @@ final class SourcesViewController: SileoViewController {
         updateSileoColors()
         
         if inRefreshing {
-            if let tableView = self.tableView, let refreshControl = tableView.refreshControl {
+            if let refreshControl = tableView.refreshControl {
                 refreshControl.endRefreshing()
                 DispatchQueue.main.async { //reactive animate
                     refreshControl.beginRefreshing()
@@ -225,17 +221,17 @@ final class SourcesViewController: SileoViewController {
     }
 
     override func viewDidAppear(_ animated: Bool) {
-        NSLog("SileoLog: SourcesViewController.viewDidAppear \(self.splitViewController?.isCollapsed) \(self.tableView?.indexPathsForSelectedRows)")
+        NSLog("SileoLog: SourcesViewController.viewDidAppear \(self.splitViewController?.isCollapsed) \(self.tableView.indexPathsForSelectedRows)")
         super.viewDidAppear(animated)
         self.navigationController?.navigationBar._hidesShadow = true
-        self.tableView?.backgroundColor = .sileoBackgroundColor
+        self.tableView.backgroundColor = .sileoBackgroundColor
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
         if inRefreshing {
-            if let tableView = self.tableView, let refreshControl = tableView.refreshControl {
+            if let refreshControl = tableView.refreshControl {
                 refreshControl.endRefreshing()
             }
         }
@@ -253,7 +249,7 @@ final class SourcesViewController: SileoViewController {
     #if !targetEnvironment(macCatalyst)
     override func setEditing(_ editing: Bool, animated: Bool) {
         super.setEditing(editing, animated: animated)
-        self.tableView?.setEditing(editing, animated: animated)
+        self.tableView.setEditing(editing, animated: animated)
         
         FRUIView.animate(withDuration: animated ? 0.2 : 0.0) {
             let nav = self.navigationItem
@@ -342,7 +338,7 @@ final class SourcesViewController: SileoViewController {
             return
         }
         guard let url = notification.object as? String,
-              let visibibleCells = tableView?.visibleCells as? [SourcesTableViewCell] else { return }
+              let visibibleCells = tableView.visibleCells as? [SourcesTableViewCell] else { return }
         for cell in visibibleCells {
             guard let repo = cell.repo else { continue }
             if repo.rawURL == url {
@@ -405,7 +401,7 @@ final class SourcesViewController: SileoViewController {
             badge?.addSubview(indicatorView)
             
             self.inRefreshing = true
-            if let tableView = self.tableView, let refreshControl = tableView.refreshControl, !refreshControl.isRefreshing {
+            if let refreshControl = tableView.refreshControl, !refreshControl.isRefreshing {
                 refreshControl.beginRefreshing()
             }
         }
@@ -507,7 +503,7 @@ final class SourcesViewController: SileoViewController {
     private func deleteRepo(at indexPath: IndexPath) {
         let repo = self.sortedRepoList[indexPath.row]
         RepoManager.shared.remove(repo: repo)
-        tableView?.deleteRows(at: [indexPath], with: .fade)
+        tableView.deleteRows(at: [indexPath], with: .fade)
         self.reSortList()
         updatingRepoList.removeAll { $0 == repo }
         self.updateFooterCount()
@@ -527,7 +523,7 @@ final class SourcesViewController: SileoViewController {
         }
         if let repo = notification.object as? Repo {
             guard let idx = sortedRepoList.firstIndex(of: repo),
-            let cell = self.tableView?.cellForRow(at: IndexPath(row: idx, section: 1)) as? SourcesTableViewCell else {
+            let cell = self.tableView.cellForRow(at: IndexPath(row: idx, section: 1)) as? SourcesTableViewCell else {
                 return
             }
             let cellRepo = cell.repo
@@ -535,11 +531,11 @@ final class SourcesViewController: SileoViewController {
             cell.layoutSubviews()
         } else if let count = notification.object as? Int {
             DispatchQueue.main.async {
-                guard let cell = self.tableView?.cellForRow(at: IndexPath(row: 0, section: 0)) as? SourcesTableViewCell else { return }
+                guard let cell = self.tableView.cellForRow(at: IndexPath(row: 0, section: 0)) as? SourcesTableViewCell else { return }
                 cell.installedLabel.text = "\(count)"
             }
         } else {
-            for cell in tableView?.visibleCells ?? [] {
+            for cell in tableView.visibleCells ?? [] {
                 if let sourcesCell = cell as? SourcesTableViewCell {
                     let cellRepo = sourcesCell.repo
                     sourcesCell.repo = cellRepo
@@ -551,7 +547,7 @@ final class SourcesViewController: SileoViewController {
     
     func reloadData() {
         self.reSortList()
-        self.tableView?.reloadData()
+        self.tableView.reloadData()
     }
     
     @objc func exportSources(_ sender: Any?) {
@@ -901,7 +897,7 @@ extension SourcesViewController: UITableViewDataSource { // UITableViewDataSourc
     }
     
     private func updateFooterCount() {
-        if let footerView = tableView?.footerView(forSection: 1) as? SourcesTableViewFooter {
+        if let footerView = tableView.footerView(forSection: 1) as? SourcesTableViewFooter {
             footerView.setCount(sortedRepoList.count)
         }
     }
@@ -1014,45 +1010,28 @@ extension SourcesViewController: UISplitViewControllerDelegate {
     }
 }
 
-extension SourcesViewController: UIViewControllerPreviewingDelegate {
-    func previewingContext(_ previewingContext: UIViewControllerPreviewing, viewControllerForLocation location: CGPoint) -> UIViewController? {
-        guard let indexPath = self.tableView?.indexPathForRow(at: location) else {
-            return nil
-        }
-        
-        let categoryVC = self.controller(indexPath: indexPath)
-        return categoryVC
-    }
-    
-    func previewingContext(_ previewingContext: UIViewControllerPreviewing, commit viewControllerToCommit: UIViewController) {
-        let navController = SileoNavigationController(rootViewController: viewControllerToCommit)
-        self.splitViewController?.showDetailViewController(navController, sender: self)
-    }
-}
-
 class TouchGestureRecognizer: UIGestureRecognizer {
     private var target: Any?
     private var action: Selector?
     override init(target: Any?, action: Selector?) {
         super.init(target: target, action: action)
-        self.cancelsTouchesInView = false
         self.target = target
         self.action = action
     }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesBegan(touches, with: event)
-        
+        self.state = .failed
         _ = (self.target as AnyObject).perform(action, with: nil)
     }
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
-        super.touchesMoved(touches, with: event)
-    }
-
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-        super.touchesEnded(touches, with: event)
-    }
-    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
-        super.touchesCancelled(touches, with: event)
-    }
+//    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+//        super.touchesMoved(touches, with: event)
+//    }
+//
+//    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+//        super.touchesEnded(touches, with: event)
+//    }
+//    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+//        super.touchesCancelled(touches, with: event)
+//    }
 }

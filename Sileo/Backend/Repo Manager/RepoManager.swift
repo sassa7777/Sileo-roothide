@@ -34,8 +34,9 @@ final class RepoManager {
     private(set) var repoList: [Repo] = []
     private var repoListLock = DispatchSemaphore(value: 1)
     
-    public func sortedRepoList() -> [Repo] {
-        return repoList.sorted(by: { obj1, obj2 -> Bool in
+    public func sortedRepoList(repos: [Repo]?=nil) -> [Repo] {
+        let repos = repos ?? repoList
+        return repos.sorted(by: { obj1, obj2 -> Bool in
             return obj1.repoName.localizedCaseInsensitiveCompare(obj2.repoName) == .orderedAscending
         })
     }
@@ -361,7 +362,7 @@ final class RepoManager {
         if repo.isFlat {
             prefix += repo.suite
         }
-        prefix = prefix.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "/", with: "_")
+        prefix = prefix.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "_", with: "%5f").replacingOccurrences(of: "/", with: "_")
         return cachePrefix.appendingPathComponent(prefix)
     }
 
@@ -667,7 +668,7 @@ final class RepoManager {
 
         var errorsFound = false
         let listlock = NSLock()
-        var repos = self.sortedRepoList()
+        var repos = self.sortedRepoList(repos: repos)
         
         for repo in repos {
             repo.startedRefresh = true
@@ -799,7 +800,7 @@ final class RepoManager {
                                     ReleaseGPGFileSemaphore.signal()
                                 }
 
-                                if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
+                                if FileManager.default.fileExists(atPath: releaseGPGFileDst.path) {
                                     log("\(releaseGPGURL) returned status \(status). \(error?.localizedDescription ?? "")", type: .error)
                                     errorsFound = true
                                 }
@@ -982,10 +983,10 @@ final class RepoManager {
                         }
                         if let releaseGPGFileURL = releaseGPGFileURL {
                             var error: String = ""
-                            let validAndTrusted = APTWrapper.verifySignature(key: releaseGPGFileURL.aptPath, data: releaseFile.url.aptPath, error: &error)
+                            let validAndTrusted = APTWrapper.verifySignature(key: releaseGPGFileURL.path, data: releaseFile.url.path, error: &error)
                             NSLog("SileoLog: validAndTrusted=\(validAndTrusted) for \(repo.url)")
                             if !validAndTrusted || !error.isEmpty {
-                                if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
+                                if FileManager.default.fileExists(atPath: releaseGPGFileDst.path) {
                                     log("Invalid GPG signature at \(releaseGPGURL)", type: .error)
                                     errorsFound = true
                                     #if targetEnvironment(macCatalyst)
@@ -1133,7 +1134,7 @@ final class RepoManager {
                         } else if releaseFileContainsHashes && !isPackagesFileValid {
                             deleteFileAsRoot(packagesFileDst)
                         }
-                        try? FileManager.default.removeItem(at: packagesFile.url.aptUrl)
+                        try? FileManager.default.removeItem(at: packagesFile.url)
                     }
                     if (skipPackages || breakOff) && FileManager.default.fileExists(atPath: packagesFileDst.path) {
                         let attributes = [FileAttributeKey.modificationDate: Date()]
@@ -1141,7 +1142,7 @@ final class RepoManager {
                     }
 
                     if !self.NO_PGP {
-                        if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) && !isReleaseGPGValid {
+                        if FileManager.default.fileExists(atPath: releaseGPGFileDst.path) && !isReleaseGPGValid {
 //                            reposUpdated += 1
                             self.checkUpdatesInBackground(repo)
                             continue
@@ -1155,14 +1156,14 @@ final class RepoManager {
                         }
                         releaseGPGFileURL.map { try? FileManager.default.removeItem(at: $0) }
                     } else {
-                        if FileManager.default.fileExists(atPath: releaseGPGFileDst.aptPath) {
+                        if FileManager.default.fileExists(atPath: releaseGPGFileDst.path) {
                             deleteFileAsRoot(releaseGPGFileDst)
                         }
                     }
                     
                     let releaseFileDst = self.cacheFile(named: "Release", for: repo)
                     moveFileAsRoot(from: releaseFile.url, to: releaseFileDst)
-                    try? FileManager.default.removeItem(at: releaseFile.url.aptUrl)
+                    try? FileManager.default.removeItem(at: releaseFile.url)
                     
                     self.checkUpdatesInBackground(repo)
                     

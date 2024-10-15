@@ -79,7 +79,8 @@ final class PackageListManager {
                     }
                 }
                 
-                DownloadManager.aptQueue.async {
+//                DownloadManager.aptQueue.async {
+                DispatchQueue.global().async {
                     NSLog("SileoLog: DependencyResolverAccelerator.shared \(Date())")
                     let accelerator = DependencyResolverAccelerator.shared // 0.3s
                     NSLog("SileoLog: DependencyResolverAccelerator.shared \(Date())")
@@ -220,7 +221,7 @@ final class PackageListManager {
             toWrite = RepoManager.shared.cacheFile(named: "Packages", for: repo)
         }
         guard let packagesFile = tmpPackagesFile,
-              let rawPackagesData = try? Data(contentsOf: packagesFile.aptUrl) else { return dict }
+              let rawPackagesData = try? Data(contentsOf: packagesFile) else { return dict }
 
         var index = 0
         var separator = "\n\n".data(using: .utf8)!
@@ -461,12 +462,12 @@ final class PackageListManager {
                     return DpkgWrapper.isVersion(package1.version, greaterThan: package2.version)
                 }
                 
-                let diff1 = name1.count - searchQuery.count
-                let diff2 = name2.count - searchQuery.count
+                let check1 = name1.contains(searchQuery)
+                let check2 = name2.contains(searchQuery)
                 
-                if diff1 < diff2 {
+                if check1 && !check2 {
                     return true
-                } else if diff1 > diff2 {
+                } else if !check1 && check2 {
                     return false
                 }
                 
@@ -559,14 +560,16 @@ final class PackageListManager {
     }
     
     public func package(identifier: String, version: String, packages: [Package]? = nil) -> Package? {
+        if let packages = packages {
+            return packages.first(where: { $0.package == identifier && $0.version == version })
+        }
+        
         //prefer using local packages
         if let package = localPackages[identifier],
            let version = package.getVersion(version) {
             return version
         }
-        if let packages = packages {
-            return packages.first(where: { $0.package == identifier && $0.version == version })
-        }
+        
         for repo in RepoManager.shared.repoList {
             if let package = repo.packageDict[identifier],
                let version = package.getVersion(version) {
@@ -588,7 +591,6 @@ final class PackageListManager {
             return
         }
 
-        let downloadMan = DownloadManager.shared
         var upgrades = Set<Package>()
         
         var incompatible = false
@@ -628,8 +630,8 @@ final class PackageListManager {
             return
         }
         
-        downloadMan.upgradeAll(packages: upgrades) {
-            downloadMan.reloadData(recheckPackages: true) {
+        DownloadManager.shared.upgradeAll(packages: upgrades) {
+            DownloadManager.shared.reloadData(recheckPackages: true) {
                 completion?()
                 if UserDefaults.standard.bool(forKey: "UpgradeAllAutoQueue", fallback: true) {
                     TabBarController.singleton?.presentPopupController()

@@ -59,7 +59,7 @@ final class Repo: Equatable {
     }
     
     var packagesExist: Bool {
-        archAvailabile && FileManager.default.fileExists(atPath: RepoManager.shared.cacheFile(named: "Packages", for: self).aptPath)
+        archAvailabile && FileManager.default.fileExists(atPath: RepoManager.shared.cacheFile(named: "Packages", for: self).path)
     }
     
     var repoDescription: String = ""
