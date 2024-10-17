@@ -43,7 +43,7 @@ class PackageCollectionViewCell: SwipeCollectionViewCell {
                 if let authorName = targetPackage.author?.name, let text=authorLabel?.text {
                     authorLabel?.text = "\(text) • \(authorName)"
                 }
-                descriptionLabel?.text = targetPackage.packageDescription
+                descriptionLabel?.text = targetPackage.description
                 
                 let url = targetPackage.icon
                 EvanderNetworking.image(url: url, condition: { [weak self] in self?.targetPackage?.icon == url }, imageView: imageView, fallback: targetPackage.defaultIcon)

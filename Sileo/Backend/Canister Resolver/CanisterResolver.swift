@@ -141,28 +141,36 @@ final class CanisterResolver {
     }
     
     public func queuePackage(_ package: Package) {
-        NSLog("queuePackage \(package.package) \(package.architecture) \(package.sourceRepo?.preferredArch)")
-        if !checkRootHide(package) {
-            return
-        }
+        NSLog("SileoLog: CanisterResolver.queuePackage \(package.package) \(package.architecture) \(package.source?.uri)")
+        
+        assert((package.isProvisional ?? false))
+        
         cachedQueue.removeAll { $0.package == package.package }
         cachedQueue.append(package)
     }
     
     public func queueCache() {
-        let plm = PackageListManager.shared
-        var buffer = 0
+        NSLog("SileoLog: CanisterResolver.queueCache total=\(cachedQueue.count)")
+
         var refreshLists = false
-        for (index, package) in cachedQueue.enumerated() {
-            if let pkg = plm.package(identifier: package.package, version: package.version) ?? plm.newestPackage(identifier: package.package, repoContext: nil) {
-                let queueFound = DownloadManager.shared.find(package: pkg)
-                if queueFound == .none {
-                    DownloadManager.shared.add(package: pkg, queue: .installations)
+        for (index, package) in cachedQueue.enumerated().reversed() {
+            NSLog("SileoLog: CanisterResolver.queueCache package[\(index)] \(package) \(package.source?.uri)")
+            let source = package.source!
+            if let repo = RepoManager.shared.repo(with: source.uri, suite: source.suite, components: source.component?.components(separatedBy: .whitespaces)),
+               let pkg = PackageListManager.shared.newestPackage(identifier: package.package, repoContext: repo) {
+                
+                if checkRootHide(pkg) {
+                    let queueFound = DownloadManager.shared.find(package: pkg)
+                    if queueFound == .none {
+                        DownloadManager.shared.add(package: pkg, queue: .installations)
+                        refreshLists = true
+                    }
+                    self.cachedQueue.removeAll(where: { $0.package == package.package })
+                } else {
+                    self.cachedQueue.removeAll(where: { $0 == package })
                 }
-                cachedQueue.remove(at: index - buffer)
-                buffer += 1
-                self.packages.removeAll(where: { $0.package == package.package })
-                refreshLists = true
+                
+//                self.packages.removeAll(where: { $0.package == package.package })
             }
         }
         if refreshLists {
@@ -178,9 +186,9 @@ final class CanisterResolver {
         if let url = URL(string: provisional.icon) {
             package.icon = url
         }
-        package.packageDescription = provisional.description
+        package.description = provisional.description
         package.author = provisional.author
-        package.depiction = provisional.sileoDepiction
+        package.sileoDepiction = provisional.sileoDepiction
         package.isProvisional = true
         package.rawSection = provisional.section
         package.section = PackageListManager.humanReadableCategory(package.rawSection)

@@ -26,9 +26,7 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
             return nil
         }
 
-        guard let action = dictionary["action"] as? String else {
-            return nil
-        }
+        self.action = dictionary["action"] as! String
         
         context = dictionary["context"]
 
@@ -36,7 +34,6 @@ class DepictionTableButtonView: DepictionBaseView, UIGestureRecognizerDelegate {
         titleLabel = UILabel(frame: .zero)
         chevronView = UIImageView(image: UIImage(named: "Chevron")?.withRenderingMode(.alwaysTemplate))
 
-        self.action = action
         backupAction = (dictionary["backupAction"] as? String) ?? ""
 
         openExternal = (dictionary["openExternal"] as? Bool) ?? false

@@ -260,6 +260,7 @@ package: stage
 	@rm -rf $(SILEO_STAGE_DIR)/$(PREFIX)/Applications/$(SILEO_APP)/Contents/PkgInfo
 	@mv $(SILEO_STAGE_DIR)/DEBIAN/prerm-mac $(SILEO_STAGE_DIR)/DEBIAN/prerm
 	@chmod 0755 $(SILEO_STAGE_DIR)/DEBIAN/prerm
+	@rm -rf ./packages
 	@mkdir -p ./packages
 	@dpkg-deb -Z$(DPKG_TYPE) --root-owner-group -b $(SILEO_STAGE_DIR) ./packages/$(SILEO_ID)_$(SILEO_VERSION)_$(DEB_ARCH).deb
 else
@@ -279,6 +280,7 @@ package: stage
 	@rm -rf $(SILEO_STAGE_DIR)/DEBIAN/postinst-mac.in
 	@rm -rf $(SILEO_STAGE_DIR)/DEBIAN/prerm-mac
 	@rm -rf "$(SILEO_STAGE_DIR)/Applications/$(SILEO_APP)/Down_Down.bundle/DownView (macOS).bundle"
+	@rm -rf ./packages
 	@mkdir -p ./packages
 	@dpkg-deb -Z$(DPKG_TYPE) --root-owner-group -b $(SILEO_STAGE_DIR) ./packages/$(SILEO_ID)_$(SILEO_VERSION)_$(DEB_ARCH).deb
 endif

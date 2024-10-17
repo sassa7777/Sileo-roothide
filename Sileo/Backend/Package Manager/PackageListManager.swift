@@ -173,9 +173,9 @@ final class PackageListManager {
         package.rawSection = dictionary["section"]?.lowercased()
         package.section = humanReadableCategory(dictionary["section"])
         
-        package.packageDescription = dictionary["description"]
+        package.description = dictionary["description"]
         package.legacyDepiction = URL(string: dictionary["depiction"])
-        package.depiction = URL(string: dictionary["sileodepiction"])
+        package.sileoDepiction = URL(string: dictionary["sileodepiction"])
         package.nativeDepiction = URL(string: dictionary["native-depiction"])
         
         if let installedSize = dictionary["installed-size"] {
@@ -378,7 +378,7 @@ final class PackageListManager {
             packageList.removeAll { package in
                 // check if the user search term is in the package ID, description or in the author / maintainer name
 //                var fields = [package.package, package.name, package.author?.name, package.maintainer?.name]
-                var fields = [package.package, package.name, package.packageDescription]
+                var fields = [package.package, package.name, package.description]
                 for field in fields {
                     if let field = field, field.count>0 {
                         if field.localizedStandardContains(lowercased) {
@@ -389,7 +389,7 @@ final class PackageListManager {
                 return true
             }
             
-            if lowercased.lengthOfBytes(using: String.Encoding.utf8) < 2 && packageList.count > 1000 {
+            if searchQuery.lengthOfBytes(using: String.Encoding.utf8) < 2 && packageList.count > 1000 {
                 //skip sort
                 return packageList
             }

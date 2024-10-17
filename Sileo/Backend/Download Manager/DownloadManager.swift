@@ -556,7 +556,7 @@ final class DownloadManager {
                 hostLoop: for host in hosts {
                     // there may be multiple repos with the same host
                     for repo in RepoManager.shared.repoList where repo.url?.host == host {
-                        if let repoPackage = PackageListManager.shared.package(identifier: packageID, version: packageVersion, packages: repo.packageArray)
+                        if let repoPackage = repo.packageDict[packageID]?.getVersion(packageVersion)
                         {
                             NSLog("SileoLog: using repoPackage=\(repoPackage.package),\(repoPackage.version),\(repoPackage.sourceRepo?.url)")
                             if checkRootHide(repoPackage) {
@@ -1126,48 +1126,15 @@ final class DownloadManager {
     }
     
     public func repoRefresh() {
-        NSLog("SileoLog: repoRefresh lock=\(lockedForInstallation) operationCount=\(operationCount()) ")
+        NSLog("SileoLog: repoRefresh lock=\(lockedForInstallation) upgrades=\(self.vars.upgrades.count) installations=\(self.vars.installations.count) installdeps=\(self.vars.installdeps.count) errors=\(self.vars.errors.count)")
+        
         if lockedForInstallation { return }
-        let plm = PackageListManager.shared
+        
         var reloadNeeded = false
-//        if operationCount() != 0 {
-//            reloadNeeded = true
-//            let savedUpgrades: [(String, String)] = upgrades.map({
-//                let pkg = $0.package
-//                return (pkg.package, pkg.version)
-//            })
-//            let savedInstalls: [(String, String)] = installations.map({
-//                let pkg = $0.package
-//                return (pkg.package, pkg.version)
-//            })
-//
-//            upgrades.removeAll()
-//            installations.removeAll()
-//            installdeps.removeAll()
-//            uninstalldeps.removeAll()
-//
-//            for tuple in savedUpgrades {
-//                let id = tuple.0
-//                let version = tuple.1
-//
-//                if let pkg = plm.package(identifier: id, version: version) ?? plm.newestPackage(identifier: id, repoContext: nil) {
-//                    if find(package: pkg) == .none {
-//                        add(package: pkg, queue: .upgrades)
-//                    }
-//                }
-//            }
-//
-//            for tuple in savedInstalls {
-//                let id = tuple.0
-//                let version = tuple.1
-//
-//                if let pkg = plm.package(identifier: id, version: version) ?? plm.newestPackage(identifier: id, repoContext: nil) {
-//                    if find(package: pkg) == .none {
-//                        add(package: pkg, queue: .installations)
-//                    }
-//                }
-//            }
-//        }
+        
+        if self.vars.errors.count > 0 {
+            reloadNeeded = true
+        }
         
         // Check for essential
         var allowedHosts = [String]()
@@ -1184,7 +1151,9 @@ final class DownloadManager {
             ]
         }
         #endif
-        let installedPackages = plm.installedPackages
+        
+        let installedPackages = PackageListManager.shared.installedPackages
+        
         for repo in allowedHosts {
             if let repo = RepoManager.shared.repoList.first(where: { $0.url?.host == repo }) {
                 for package in repo.packageArray where package.essential == "yes" &&
@@ -1197,6 +1166,7 @@ final class DownloadManager {
                 }
             }
         }
+        
         // Don't bother to reloadData if there's nothing to reload, it's a waste of resources
         if reloadNeeded {
             reloadData(recheckPackages: true)

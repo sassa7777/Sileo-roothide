@@ -23,10 +23,11 @@ class DepictionHeaderView: DepictionBaseView {
         headerLabel = UILabel(frame: .zero)
         super.init(dictionary: dictionary, viewController: viewController, tintColor: tintColor, isActionable: isActionable)
 
+        var fontSize = CGFloat(truncating: dictionary["fontSize"] as? NSNumber ?? 22)
         let useBoldText = (dictionary["useBoldText"] as? Bool) ?? true
         if useBoldText {
             headerLabel?.textColor = .sileoLabel
-            headerLabel?.font = UIFont.systemFont(ofSize: 22, weight: .bold)
+            headerLabel?.font = UIFont.systemFont(ofSize: fontSize, weight: .bold)
             
             weak var weakSelf = self
             NotificationCenter.default.addObserver(weakSelf as Any,
@@ -35,7 +36,7 @@ class DepictionHeaderView: DepictionBaseView {
                                                    object: nil)
         } else {
             headerLabel?.textColor = UIColor(white: 175.0/255.0, alpha: 1)
-            headerLabel?.font = UIFont.systemFont(ofSize: 22)
+            headerLabel?.font = UIFont.systemFont(ofSize: fontSize)
         }
         headerLabel?.text = title
 

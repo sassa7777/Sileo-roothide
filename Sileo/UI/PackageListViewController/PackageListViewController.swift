@@ -777,7 +777,7 @@ extension PackageListViewController: UISearchBarDelegate {
        
        let text = (searchController?.searchBar.text ?? "").lowercased()
        let oldEmpty = provisionalPackages.isEmpty
-       if text.lengthOfBytes(using: String.Encoding.utf8) <= 2 {
+       if text.lengthOfBytes(using: String.Encoding.utf8) < 2 {
            self.provisionalPackages.removeAll()
            return oldEmpty ? .nothing : .delete
        }
@@ -931,7 +931,9 @@ extension PackageListViewController: UISearchResultsUpdating {
             }
             
 //Truncating arrays before transferring it to the main queue when searching to prevent UI lag
-            packages = Array(packages.prefix(1000))
+            if query.lengthOfBytes(using: String.Encoding.utf8) < 2 {
+                packages = Array(packages.prefix(1000))
+            }
 //
             DispatchQueue.main.async {
                 self.packages = packages

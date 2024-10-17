@@ -101,7 +101,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         newDepictView.alpha = 0.1
         self.depictionView = newDepictView
         self.contentView.addSubview(newDepictView)
-        self.viewDidLayoutSubviews()
+        self.view.layoutIfNeeded()
         
         FRUIView.animate(withDuration: 0.25, animations: {
             oldDepictView?.alpha = 0
@@ -201,8 +201,6 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         }
 
         self.reloadData()
-
-        self.viewDidLayoutSubviews()
         
         if let package=self.package {
             CanisterResolver.shared.ingest(packages: [package])
@@ -216,11 +214,16 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
     private var savedProvisional: Package?
     
     @objc func reloadData() {
+        NSLog("SileoLog: PackageViewController.reloadData")
         guard Thread.current.isMainThread else {
             DispatchQueue.main.async {
                 self.reloadData()
             }
             return
+        }
+        
+        defer {
+            self.view.layoutIfNeeded()
         }
         
         depictionView?.removeFromSuperview()
@@ -275,25 +278,28 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         var rawDescription: [[String: Any]] = [
             [
                 "class": "DepictionMarkdownView",
-                "markdown": package.packageDescription ?? String(localizationKey: "Package_No_Description_Available"),
+                "markdown": package.description ?? String(localizationKey: "Package_No_Description_Available"),
                 "useSpacing": true
             ]
         ]
-        if package.legacyDepiction != nil && package.depiction == nil {
+
+        if package.sileoDepiction == nil,
+            let legacyDepiction = package.legacyDepiction {
             rawDescription.append([
                 "class": "DepictionTableButtonView",
                 "title": String(localizationKey: "View_Depiction"),
-                "action": package.legacyDepiction ?? ""
+                "action": legacyDepiction.absoluteString
             ] as [String: Any])
         }
 
-        var rawDepiction = package.sourceRepo==nil ? [
+        let rawDepiction = package.sourceRepo==nil ? [
             "class": "DepictionStackView",
             "views": [
                 [
                     "class": "DepictionHeaderView",
                     "title": String(localizationKey: "Package_Details_Tab"),
-                    "useBoldText" : false,
+                    "useBoldText" : true,
+//                    "fontSize" : 17
                 ],
                 ["class": "DepictionSeparatorView"],
             ] + rawDescription
@@ -323,7 +329,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
         }
 
         if !package.fromStatusFile,
-            let depiction = package.depiction {
+            let depiction = package.sileoDepiction {
             let urlRequest = URLManager.urlRequest(depiction)
             EvanderNetworking.request(request: urlRequest, type: Data.self) { [weak self] success, _, _, data in
                 guard success,
@@ -333,13 +339,9 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             }
         }
 
-        depictionFooterView?.removeFromSuperview()
-        var footerDict: [String: Any] = [
-            "class": "DepictionStackView"
-        ]
-        var views = [[String: Any]]()
-        if installedPackage != nil {
-            views = [
+        var footerViews = [[String: Any]]()
+        if let installedPackage = installedPackage {
+            footerViews.append(contentsOf: [
                 [
                     "class": "DepictionSeparatorView"
                 ],
@@ -350,7 +352,7 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 [
                     "class": "DepictionTableTextView",
                     "title": String(localizationKey: "Version"),
-                    "text": installedPackage?.version ?? ""
+                    "text": installedPackage.version
                 ],
                 [
                     "class": "DepictionTableButtonView",
@@ -360,18 +362,18 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 [
                     "class": "DepictionSeparatorView"
                 ]
-            ]
+            ])
         }
         
         if let repo = package.sourceRepo {
-            views.insert([
+            footerViews.insert([
                 "class": "DepictionSeparatorView"
             ], at: 0)
-            views.insert([
+            footerViews.insert([
                 "class": "DepictionHeaderView",
                 "title": String(localizationKey: "Repo")
             ], at: 1)
-            views.insert([
+            footerViews.insert([
                 "class": "DepictionTableButtonView",
                 "title": RepoManager.shared.getUniqueName(repo: repo),
                 "action": "showRepoContext",
@@ -380,13 +382,6 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             ], at: 2)
         }
         else if package.fromStatusFile {
-            views.insert([
-                "class": "DepictionSeparatorView"
-            ], at: 0)
-            views.insert([
-                "class": "DepictionHeaderView",
-                "title": String(localizationKey: "Repo")
-            ], at: 1)
             
             var repoPackages: [Package] = []
             for repo in RepoManager.shared.repoList {
@@ -397,18 +392,29 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
             
             repoPackages = PackageListManager.shared.sortPackages(packages: repoPackages, search: nil)
             
-            var viewIndex = 2
-            for package in repoPackages {
-                guard let repo = package.sourceRepo else {
-                    continue
+            if repoPackages.count > 0
+            {
+                footerViews.insert([
+                    "class": "DepictionSeparatorView"
+                ], at: 0)
+                footerViews.insert([
+                    "class": "DepictionHeaderView",
+                    "title": String(localizationKey: "Repo")
+                ], at: 1)
+                
+                var viewIndex = 2
+                for package in repoPackages {
+                    guard let repo = package.sourceRepo else {
+                        continue
+                    }
+                    footerViews.insert([
+                        "class": "DepictionTableTextButtonView",
+                        "title": repo.displayName,
+                        "text": package.version,
+                        "action": "showPackage",
+                        "context": package as Any,
+                    ], at: viewIndex++)
                 }
-                views.insert([
-                    "class": "DepictionTableTextButtonView",
-                    "title": repo.displayName,
-                    "text": package.version,
-                    "action": "showPackage",
-                    "context": package as Any,
-                ], at: viewIndex++)
             }
         }
         else if let source=package.source, package.isProvisional ?? false {
@@ -422,30 +428,35 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
                 url = "Invalid"
             }
                 
-            views.insert([
+            footerViews.insert([
                 "class": "DepictionSeparatorView"
             ], at: 0)
-            views.insert([
+            footerViews.insert([
                 "class": "DepictionHeaderView",
                 "title": String(localizationKey: "Repo")
             ], at: 1)
-            views.insert([
+            footerViews.insert([
                 "class": "DepictionSubheaderView",
                 "useBoldText": true,
                 "title": url
             ], at: 2)
         }
         
-        views.append([
+        footerViews.append([
             "class": "DepictionSubheaderView",
             "alignment": 1,
             "title": "\(package.package) (\(package.version))"
         ])
-        footerDict = [
+        
+        let footerDict = [
             "class": "DepictionStackView",
-            "views": views
+            "views": footerViews
         ] as [String: Any]
 
+        
+        depictionFooterView?.removeFromSuperview()
+        depictionFooterView = nil
+        
         if let depictionFooterView = DepictionBaseView.view(dictionary: footerDict, viewController: self, tintColor: nil, isActionable: false) {
             depictionFooterView.delegate = self
             self.depictionFooterView = depictionFooterView
@@ -611,10 +622,14 @@ class PackageViewController: SileoViewController, PackageQueueButtonDataProvider
     }
 
     func subviewHeightChanged() {
-        self.viewDidLayoutSubviews()
+        NSLog("SileoLog: PackageViewController.subviewHeightChanged")
+        self.view.layoutIfNeeded()
     }
 
     override func viewDidLayoutSubviews() {
+        NSLog("SileoLog: PackageViewController.viewDidLayoutSubviews")
+//        Thread.callStackSymbols.forEach{NSLog("SileoLog: viewDidLayoutSubviews callstack=\($0)")}
+        
         super.viewDidLayoutSubviews()
 
         depictionHeight = depictionView?.depictionHeight(width: self.view.bounds.width) ?? 0

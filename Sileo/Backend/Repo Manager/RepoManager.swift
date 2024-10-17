@@ -1231,8 +1231,10 @@ final class RepoManager {
                 DownloadManager.aptQueue.async {
                     DatabaseManager.shared.saveQueue()
                     DownloadManager.shared.repoRefresh()
-                    DependencyResolverAccelerator.shared.preflightInstalled()
-                    CanisterResolver.shared.queueCache()
+                    DispatchQueue.global().async {
+                        DependencyResolverAccelerator.shared.preflightInstalled()
+                        CanisterResolver.shared.queueCache()
+                    }
                 }
             }
             

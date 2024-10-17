@@ -32,14 +32,16 @@ class DependencyResolverAccelerator {
     
     private var preflightedPackages: [URL: Set<PreflightedPackage>] = [:]
     private var toBePreflighted: [URL: Set<PreflightedPackage>] = [:]
-    private var preflightLock = NSLock()
+    private var preflightLock = NSRecursiveLock()
     public func preflightInstalled() {
         NSLog("SileoLog: DependencyResolverAccelerator.preflightInstalled()")
         if Thread.isMainThread {
             fatalError("Don't call things that will block the UI from the main thread")
         }
        
+        preflightLock.lock()
         try? getDependencies(packages: Array(PackageListManager.shared.installedPackages.values))
+        preflightLock.unlock()
     }
     
     private var depResolverPrefix: URL = {
@@ -70,6 +72,10 @@ class DependencyResolverAccelerator {
         if !repo.archAvailabile {
             return
         }
+        
+        self.preflightLock.lock()
+        defer { self.preflightLock.unlock() }
+        
         let url = RepoManager.shared.cacheFile(named: "Packages", for: repo)
         let newSourcesFile = depResolverPrefix.appendingPathComponent(url.lastPathComponent)
         toBePreflighted.removeValue(forKey: url)
@@ -83,6 +89,8 @@ class DependencyResolverAccelerator {
     
     public func getDependencies(packages: [Package]) throws {
         NSLog("SileoLog: DependencyResolverAccelerator.getDependencies(\(packages.map({ $0.package }))")
+        NSLog("SileoLog: preflightedPackages=\(preflightedPackages.keys)")
+        NSLog("SileoLog: toBePreflighted=\(toBePreflighted.keys))")
         if Thread.isMainThread {
             fatalError("Don't call things that will block the UI from the main thread")
         }
@@ -95,10 +103,14 @@ class DependencyResolverAccelerator {
         for package in packages {
             getDependenciesInternal(package: package)
         }
-        NSLog("SileoLog: getDependencies3 \(toBePreflighted.count)")
+        NSLog("SileoLog: getDependencies3 toBePreflighted=\(toBePreflighted.keys))")
         
         let resolverPrefix = depResolverPrefix
         for (sourcesFile, packages) in toBePreflighted {
+            //NSLog("SileoLog: sourcesFile=\(sourcesFile) packages=\(packages.map({ $0.package }))")
+            
+            defer { toBePreflighted.removeValue(forKey: sourcesFile) }
+            
             if sourcesFile.lastPathComponent == "status" || sourcesFile.scheme == "local" {
                 continue
             }
@@ -119,10 +131,10 @@ class DependencyResolverAccelerator {
             do {
                 try sourcesData.append(to: newSourcesFile)
             } catch {
+                NSLog("SileoLog: throw \(error)")
                 throw error
             }
             
-            toBePreflighted.removeValue(forKey: sourcesFile)
             let preflighted = preflightedPackages[sourcesFile] ?? Set<PreflightedPackage>()
             preflightedPackages[sourcesFile] = preflighted.union(packages)
         }
@@ -130,6 +142,7 @@ class DependencyResolverAccelerator {
     }
     
     private func getDependenciesInternal(package: Package) {
+        //NSLog("SileoLog: getDependenciesInternal \(package.package) \(package.sourceFileURL)")
         let url = package.sourceFileURL ?? URL(string: "local://")!
         if let preflighted = preflightedPackages[url] {
             if preflighted.contains(where: { $0 == package }) {
@@ -142,6 +155,7 @@ class DependencyResolverAccelerator {
     }
    
     private func getDependenciesInternal2(package: Package, sourceFileURL: URL) {
+        //NSLog("SileoLog: getDependenciesInternal2 \(package.package) \(sourceFileURL)")
         if let preflighted = toBePreflighted[sourceFileURL] {
             if preflighted.contains(where: { $0 == package }) {
                 return
@@ -161,7 +175,6 @@ class DependencyResolverAccelerator {
   
         // Depends, Pre-Depends, Recommends, Suggests, Breaks, Conflicts, Provides, Replaces, Enhance
         let packageKeys = ["depends", "pre-depends", "conflicts", "replaces", "recommends", "provides", "breaks"]
-        
         for packageKey in packageKeys {
             if let packagesData = package.rawControl[packageKey] {
                 let packageIds = parseDependsString(depends: packagesData)

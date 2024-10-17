@@ -17,9 +17,10 @@ final class Package: PackageProtocol {
     public var maintainer: Maintainer?
     public var section: String?
     public var rawSection: String?
-    public var packageDescription: String?
+    public var description: String?
     public var legacyDepiction: URL?
-    public var depiction: URL?
+    public var nativeDepiction: URL?
+    public var sileoDepiction: URL?
     public var icon: URL?
     public var sourceFile: String?
     public var source: ProvisionalRepo?
@@ -31,7 +32,6 @@ final class Package: PackageProtocol {
     public var commercial: Bool = false
     public var installedSize: Int?
     public var tags: PackageTags = .none
-    public var nativeDepiction: URL?
     public var origArchitecture: String?
     
     public var allVersionsInternal = [String: Package]()
