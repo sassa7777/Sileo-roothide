@@ -612,6 +612,7 @@ class DownloadsTableViewController: SileoViewController {
                 self.statusWork(package: package, status: statusReadable)
             }
         }, outputCallback: { output, pipe in
+            NSLog("SileoLog: apt outputCallback \(pipe):\(output)")
             var textColor = Dusk.foregroundColor
             if pipe == STDERR_FILENO {
                 textColor = Dusk.errorColor
@@ -637,7 +638,8 @@ class DownloadsTableViewController: SileoViewController {
                 
                 self.detailsTextView?.scrollRangeToVisible(NSRange(location: detailsAttributedString.string.count - 1, length: 1))
             }
-        }, completionCallback: { _, finish, refresh in
+        }, completionCallback: { status, finish, refresh in
+            NSLog("SileoLog: apt completionCallback \(status) \(finish) \(refresh)")
             PackageListManager.shared.installChange()
             DispatchQueue.main.async {
                 

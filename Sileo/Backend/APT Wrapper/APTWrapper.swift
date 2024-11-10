@@ -191,36 +191,36 @@ class APTWrapper {
         }
         var finish = FINISH.back
         #if targetEnvironment(macCatalyst)
-        arguments[0] = "apt-get"
-        DispatchQueue.global(qos: .default).async {
-            let wrapper = MacRootWrapper.shared
-            let pipeObject = wrapper.sharedPipe
-            pipeObject.stdoutCompletion = { str in
-                outputCallback(str, Int(STDOUT_FILENO))
-            }
-            pipeObject.stderrCompletion = { str in
-                outputCallback(str, Int(STDERR_FILENO))
-            }
-            pipeObject.statusFdCompletion = { str in
-                let statusLines = str.components(separatedBy: "\n")
-                for status in statusLines {
-                    let (statusValid, statusProgress, statusReadable, package) = self.installProgress(aptStatus: status)
-                    progressCallback(statusProgress, statusValid, statusReadable, package)
-                }
-            }
-            pipeObject.pipeCompletion = { status in
-                wrapper.resetConnection()
-                spawnAsRoot(args: [CommandPath.aptget, "clean"])
-                for file in DownloadManager.shared.cachedDownloadFiles.raw {
-                    deleteFileAsRoot(file)
-                }
-                completionCallback(Int(status), finish, false)
-            }
-            guard let helper = MacRootWrapper.shared.helper else {
-                fatalError("[Sileo] Protocol 3: Protect the Pilot")
-            }
-            helper.spawnAsRoot(command: CommandPath.aptget, args: arguments)
-        }
+//        arguments[0] = "apt-get"
+//        DispatchQueue.global(qos: .default).async {
+//            let wrapper = MacRootWrapper.shared
+//            let pipeObject = wrapper.sharedPipe
+//            pipeObject.stdoutCompletion = { str in
+//                outputCallback(str, Int(STDOUT_FILENO))
+//            }
+//            pipeObject.stderrCompletion = { str in
+//                outputCallback(str, Int(STDERR_FILENO))
+//            }
+//            pipeObject.statusFdCompletion = { str in
+//                let statusLines = str.components(separatedBy: "\n")
+//                for status in statusLines {
+//                    let (statusValid, statusProgress, statusReadable, package) = self.installProgress(aptStatus: status)
+//                    progressCallback(statusProgress, statusValid, statusReadable, package)
+//                }
+//            }
+//            pipeObject.pipeCompletion = { status in
+//                wrapper.resetConnection()
+//                spawnAsRoot(args: [CommandPath.aptget, "clean"])
+//                for file in DownloadManager.shared.cachedDownloadFiles.raw {
+//                    deleteFileAsRoot(file)
+//                }
+//                completionCallback(Int(status), finish, false)
+//            }
+//            guard let helper = MacRootWrapper.shared.helper else {
+//                fatalError("[Sileo] Protocol 3: Protect the Pilot")
+//            }
+//            helper.spawnAsRoot(command: CommandPath.aptget, args: arguments)
+//        }
         #else
         DispatchQueue.global(qos: .default).async {
             let oldApps = APTWrapper.dictionaryOfScannedApps()

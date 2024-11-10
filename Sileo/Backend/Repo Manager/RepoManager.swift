@@ -12,7 +12,8 @@ import Evander
 // swiftlint:disable:next type_body_length
 final class RepoManager {
     
-    let NO_PGP = true
+    private let NO_PGP = true
+    private var hasDuplicateRepo = false
     
     static let progressNotification = Notification.Name("SileoRepoManagerProgress")
     private var repoDatabase = DispatchQueue(label: "org.coolstar.SileoStore.repo-database")
@@ -81,7 +82,11 @@ final class RepoManager {
             if item.pathExtension == "list" {
                 parseListFile(at: item)
             } else if item.pathExtension == "sources" {
+                self.hasDuplicateRepo = false
                 parseSourcesFile(at: item)
+                if self.hasDuplicateRepo && item.path.hasSuffix("/etc/apt/sources.list.d/sileo.sources") {
+                    self.writeListToFile()
+                }
             }
         }
         #endif
@@ -89,7 +94,8 @@ final class RepoManager {
             UserDefaults.standard.set(true, forKey: "Sileo.DefaultRepo")
             addRepos(with: [
                 URL(string: "https://havoc.app")!,
-                URL(string: "https://repo.chariz.com")!
+                URL(string: "https://repo.chariz.com")!,
+                URL(string: "https://www.yourepo.com")!
             ])
         }
     }
@@ -260,14 +266,8 @@ final class RepoManager {
     }
 
     func repo(with repo: Repo) -> Repo? {
-        defer { repoListLock.signal() }
-        repoListLock.wait()
-        for repo2 in repoList {
-            if repo2.rawURL==repo.rawURL && repo2.suite==repo.suite && Set(repo2.components)==Set(repo.components) {
-                return repo2
-            }
-        }
-        return nil
+        let url = URL(string: repo.rawURL)!
+        return self.repo(with: url, suite: repo.suite, components: repo.components)
     }
     
     func repo(with url: URL, suite: String="./", components: [String]?=[]) -> Repo? {
@@ -276,8 +276,15 @@ final class RepoManager {
         defer { repoListLock.signal() }
         repoListLock.wait()
         
+        // apt doesn't like having different url schemes for the same repo
+        var urlcomponents = URLComponents(string: url.absoluteString)!
+        urlcomponents.scheme = "url"
+        
         for repo in repoList {
-            if repo.rawURL == url.absoluteString && repo.suite==suite && Set(repo.components)==Set(components) {
+            var repourlcomponents = URLComponents(string: repo.rawURL)!
+            repourlcomponents.scheme = "url"
+            
+            if urlcomponents == repourlcomponents && repo.suite==suite && Set(repo.components)==Set(components) {
                 return repo
             }
         }
@@ -289,18 +296,7 @@ final class RepoManager {
     }
 
     func hasRepo(with url: URL, suite: String="./", components: [String]?=[]) -> Bool {
-        let components = components?.filter({$0.isEmpty==false}) ?? []
-        let url = normalizeURL(url)!
-        defer { repoListLock.signal() }
-        repoListLock.wait()
-        
-        for repo in repoList {
-            if repo.rawURL == url.absoluteString && repo.suite==suite && Set(repo.components)==Set(components) {
-                NSLog("SileoLog: hasRepo \(url)=\(repo.rawURL), \(suite)=\(repo.suite), \(components)=\(repo.components)")
-                return true
-            }
-        }
-        return false
+        return repo(with: url, suite: suite, components: components) != nil
     }
 
     private func parseRepoEntry(_ repoEntry: String, at url: URL, withTypes types: [String], uris: [String], suites: [String], components: [String]?) {
@@ -314,10 +310,12 @@ final class RepoManager {
             guard let _repoURL = URL(string: repoURL), ["http","https"].contains(_repoURL.scheme?.lowercased()), _repoURL.host != nil else {
                 continue
             }
-            guard !hasRepo(with: url, suite: suites[0], components: components) else {
+            
+            guard !hasRepo(with: _repoURL, suite: suites[0], components: components) else {
+                self.hasDuplicateRepo = true
                 continue
             }
-
+            
             let repos = suites.map { (suite: String) -> Repo in
                 let repo = Repo()
                 repo.rawEntry = repoEntry

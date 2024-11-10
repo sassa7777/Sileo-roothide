@@ -136,7 +136,7 @@ final class PackageListManager {
                 }
             }
         }
-        return updatesAvailable
+        return updatesAvailable.sorted { $0.0.name < $1.0.name }
     }
 
     public class func humanReadableCategory(_ rawCategory: String?) -> String {
