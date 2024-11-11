@@ -221,7 +221,7 @@ final public class MacRootWrapper {
         let array = Array(UnsafeBufferPointer(start: buffer, count: bytesRead)) + [UInt8(0)]
         array.withUnsafeBufferPointer { ptr in
             let str = String(cString: unsafeBitCast(ptr.baseAddress, to: UnsafePointer<CChar>.self))
-            NSLog("SileoLog: output=\(str)")
+            NSLog("SileoLog: stdout=\(str)")
             stdoutStr += str
         }
     }
@@ -242,7 +242,7 @@ final public class MacRootWrapper {
         let array = Array(UnsafeBufferPointer(start: buffer, count: bytesRead)) + [UInt8(0)]
         array.withUnsafeBufferPointer { ptr in
             let str = String(cString: unsafeBitCast(ptr.baseAddress, to: UnsafePointer<CChar>.self))
-            NSLog("SileoLog: error=\(str)")
+            NSLog("SileoLog: stderr=\(str)")
             stderrStr += str
         }
     }

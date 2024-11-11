@@ -26,7 +26,10 @@ enum pkgstatus: String {
     case notinstalled = "not-installed"
     case configfiles = "config-files"
     case halfinstalled = "half-installed"
-    case unpacked = "unpackad"
+    case unpacked = "unpacked" /*You might want to run 'apt --fix-broken install' to correct these.
+                                The following packages have unmet dependencies:
+                                 rootless-compat : Depends: com.roothide.patchloader (>= 0.0.4) but it is not going to be installed
+                                E: Unmet dependencies. Try 'apt --fix-broken install' with no packages (or specify a solution).*/
     case halfconfigured = "half-configured"
     case triggersawaited = "triggers-awaited"
     case triggerspending = "triggers-pending"

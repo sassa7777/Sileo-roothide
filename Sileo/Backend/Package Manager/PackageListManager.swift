@@ -438,32 +438,16 @@ final class PackageListManager {
         var tmp = packages
         tmp.sort { package1, package2 -> Bool in
             
-            let check1 = checkRootHide(package1)
-            let check2 = checkRootHide(package2)
-            
-            if check1 && !check2 {
-                return true
-            } else if !check1 && check2 {
-                return false
-            }
-            
-            let name1 = package1.name.lowercased()
-            let name2 = package2.name.lowercased()
+            var check1: Bool
+            var check2: Bool
                 
             if let searchQuery = search?.lowercased(), !searchQuery.isEmpty
             {
-                if name1.hasPrefix(searchQuery) && !name2.hasPrefix(searchQuery) {
-                    return true
-                } else if !name1.hasPrefix(searchQuery) && name2.hasPrefix(searchQuery) {
-                    return false
-                }
+                let name1 = package1.name.lowercased()
+                let name2 = package2.name.lowercased()
                 
-                if package1.package == package2.package {
-                    return DpkgWrapper.isVersion(package1.version, greaterThan: package2.version)
-                }
-                
-                let check1 = name1.contains(searchQuery)
-                let check2 = name2.contains(searchQuery)
+                check1 = name1.hasPrefix(searchQuery)
+                check2 = name2.hasPrefix(searchQuery)
                 
                 if check1 && !check2 {
                     return true
@@ -471,14 +455,49 @@ final class PackageListManager {
                     return false
                 }
                 
-            } else {
-
+                check1 = name1.contains(searchQuery)
+                check2 = name2.contains(searchQuery)
+                
+                if check1 && !check2 {
+                    return true
+                } else if !check1 && check2 {
+                    return false
+                }
+                
+                check1 = checkRootHide(package1)
+                check2 = checkRootHide(package2)
+                
+                if check1 && !check2 {
+                    return true
+                } else if !check1 && check2 {
+                    return false
+                }
+                
                 if package1.package == package2.package {
                     return DpkgWrapper.isVersion(package1.version, greaterThan: package2.version)
                 }
+                
+                return name1.compare(name2) != .orderedDescending
+                
+            } else {
+                
+                check1 = checkRootHide(package1)
+                check2 = checkRootHide(package2)
+                
+                if check1 && !check2 {
+                    return true
+                } else if !check1 && check2 {
+                    return false
+                }
+                
+                if package1.package == package2.package {
+                    return DpkgWrapper.isVersion(package1.version, greaterThan: package2.version)
+                }
+                
+                let name1 = package1.name.lowercased()
+                let name2 = package2.name.lowercased()
+                return name1.compare(name2) != .orderedDescending
             }
-            
-            return name1.compare(name2) != .orderedDescending
         }
         return tmp
     }

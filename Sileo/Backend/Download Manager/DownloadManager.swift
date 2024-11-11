@@ -630,7 +630,7 @@ final class DownloadManager {
                 }
             } else if package.eFlag == .ok {
                 let downloadPackage = DownloadPackage(package: package)
-                if package.wantInfo == .deinstall || package.wantInfo == .purge || package.status == .halfconfigured {
+                if package.wantInfo == .deinstall || package.wantInfo == .purge || package.status == .halfconfigured || package.status == .unpacked {
                     if !self.vars.installations.contains(downloadPackage) && !self.vars.uninstallations.contains(downloadPackage) {
                         NSLog("SileoLog: wantInfo \(downloadPackage.package.package) = \(downloadPackage.package.wantInfo.rawValue)")
                         self.vars.uninstallations.insert(downloadPackage)
@@ -667,7 +667,6 @@ final class DownloadManager {
         }
         self.vars.queuedDownloads.removeAll()
         currentDownloads = 0
-        self.checkInstalled()
     }
     
     public func reloadData(recheckPackages: Bool) {
@@ -679,9 +678,11 @@ final class DownloadManager {
         DownloadManager.aptQueue.async { [self] in
             if recheckPackages {
                 do {
+                    self.checkInstalled() //remove packages(status=unpacked) so that apt can correctly resolve the dependencies of the packages to be installed.
                     try self.recheckTotalOps()
                 } catch {
                     removeAllItems()
+                    self.checkInstalled()
                     viewController.cancelDownload(nil)
                     TabBarController.singleton?.displayError(error.localizedDescription)
                 }
