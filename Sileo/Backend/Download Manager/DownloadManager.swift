@@ -24,7 +24,7 @@ final class DownloadManager {
     private static let aptQueueContext = 50
     private static let aptQueueKey = DispatchSpecificKey<Int>()
     public static let aptQueue: DispatchQueue = {
-        let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInitiated)
+        let queue = DispatchQueue(label: "Sileo.AptQueue", qos: .userInteractive)
         queue.setSpecific(key: aptQueueKey, value: aptQueueContext)
         return queue
     }()

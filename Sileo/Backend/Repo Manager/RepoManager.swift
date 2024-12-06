@@ -93,9 +93,9 @@ final class RepoManager {
         if !UserDefaults.standard.bool(forKey: "Sileo.DefaultRepo") {
             UserDefaults.standard.set(true, forKey: "Sileo.DefaultRepo")
             addRepos(with: [
+                URL(string: "https://yourepo.com")!,
                 URL(string: "https://havoc.app")!,
                 URL(string: "https://repo.chariz.com")!,
-                URL(string: "https://www.yourepo.com")!
             ])
         }
     }
@@ -381,14 +381,12 @@ final class RepoManager {
             .appendingPathComponent(prefix.lastPathComponent + name)
     }
 
+    private static let iconQueue = OperationQueue(name: "iconQueue", maxConcurrent: 10)
     private func _checkUpdatesInBackground(_ repos: [Repo]) {
         NSLog("SileoLog: _checkUpdatesInBackground \(repos)")
         defer {
             NSLog("SileoLog: _checkUpdatesInBackground finished")
         }
-
-        let iconQueue = OperationQueue()
-        iconQueue.maxConcurrentOperationCount = 10
 
         let dispatchGroup = DispatchGroup()
         dispatchGroup.notify(queue: .global()) {
@@ -423,7 +421,7 @@ final class RepoManager {
                 //prevent hundreds of repos drain/block the Global Dispatch Queue
                 //DispatchQueue.global().async {
                 dispatchGroup.enter()
-                iconQueue.addOperation {
+                RepoManager.iconQueue.addOperation {
                     defer { dispatchGroup.leave() }
                     @discardableResult func image(for url: URL, scale: CGFloat) -> Bool {
                         let cache = EvanderNetworking.imageCache(url, scale: scale)
@@ -673,9 +671,9 @@ final class RepoManager {
             self.postProgressNotification(repo)
         }
 
-        for threadID in 0..<min(repos.count, ProcessInfo.processInfo.processorCount * 2 * (isBackground ? 1 : 2)) {
+        for iqueue in 0..<min(repos.count, ProcessInfo.processInfo.processorCount * 2 * (isBackground ? 1 : 2)) {
             updateGroup.enter() //enter group before async block
-            let repoQueue = DispatchQueue(label: "repo-queue-\(threadID)")
+            let repoQueue = DispatchQueue(label: "repo-update-queue-\(iqueue)")
             repoQueue.async {
                 while true {
                     listlock.lock()
